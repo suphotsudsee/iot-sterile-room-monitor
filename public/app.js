@@ -192,9 +192,11 @@ function drawSummary(days) {
   setText("#minRh", rhValues.length ? format(Math.min(...rhValues)) : "-");
   setText("#avgRh", format(mean(rhValues)));
 
-  const counts = { normal: 0, caution: 0, high: 0, critical: 0 };
+  const tempCounts = { normal: 0, caution: 0, high: 0, critical: 0 };
+  const rhCounts = { normal: 0, caution: 0, high: 0, critical: 0 };
   available.forEach(day => {
-    counts[overallLevel(day)] += 1;
+    tempCounts[tempLevel(day.temperature)] += 1;
+    rhCounts[rhLevel(day.humidity)] += 1;
   });
 
   const cards = [
@@ -204,14 +206,25 @@ function drawSummary(days) {
     { key: "critical", title: "วิกฤต (แดง)", className: "critical" }
   ];
 
-  $("#summaryCards").innerHTML = cards.map(card => {
-    const percent = available.length ? (counts[card.key] / available.length) * 100 : 0;
-    return `<article class="summary-card ${card.className}">
-      <b>${card.title}</b>
-      <p>จำนวนวัน ${counts[card.key]} วัน</p>
-      <p>คิดเป็น ${format(percent, 0)} %</p>
-    </article>`;
-  }).join("");
+  function renderMetricSummary(title, unit, counts) {
+    const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+    const nodes = cards.map(card => {
+      const percent = total ? (counts[card.key] / total) * 100 : 0;
+      return `<article class="summary-card ${card.className}">
+        <b>${card.title}</b>
+        <p>จำนวนวัน ${counts[card.key]} วัน</p>
+        <p>คิดเป็น ${format(percent, 0)} %</p>
+      </article>`;
+    }).join("");
+    return `<div class="summary-group">
+      <h4>${title} <span>${unit}</span></h4>
+      <div class="summary-card-grid">${nodes}</div>
+    </div>`;
+  }
+
+  $("#summaryCards").innerHTML =
+    renderMetricSummary("อุณหภูมิ", "°C", tempCounts)
+    + renderMetricSummary("ความชื้นสัมพัทธ์", "RH %", rhCounts);
 }
 
 function renderSelectors() {

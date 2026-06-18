@@ -504,6 +504,27 @@ h3 {
 
 .summary-cards {
   display: grid;
+  gap: 14px;
+}
+
+.summary-group {
+  display: grid;
+  gap: 8px;
+}
+
+.summary-group h4 {
+  margin: 0;
+  color: var(--blue);
+  font-size: 16px;
+}
+
+.summary-group h4 span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.summary-card-grid {
+  display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
