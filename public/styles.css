@@ -237,6 +237,19 @@ button {
   gap: 8px;
 }
 
+.small-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.small-grid label span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .devices {
   margin-top: 12px;
   padding: 12px 14px;

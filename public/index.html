@@ -68,10 +68,10 @@
               <h3>เพิ่มห้อง</h3>
               <input name="name" placeholder="ชื่อห้อง" required>
               <div class="small-grid">
-                <input name="tempMin" type="number" step="0.1" value="20" placeholder="Temp min">
-                <input name="tempMax" type="number" step="0.1" value="24" placeholder="Temp max">
-                <input name="rhMin" type="number" step="0.1" value="30" placeholder="RH min">
-                <input name="rhMax" type="number" step="0.1" value="60" placeholder="RH max">
+                <label>Temp ต่ำสุด <span>°C</span><input name="tempMin" type="number" step="0.1" value="20" placeholder="20 °C"></label>
+                <label>Temp สูงสุด <span>°C</span><input name="tempMax" type="number" step="0.1" value="24" placeholder="24 °C"></label>
+                <label>RH ต่ำสุด <span>%</span><input name="rhMin" type="number" step="0.1" value="30" placeholder="30 %"></label>
+                <label>RH สูงสุด <span>%</span><input name="rhMax" type="number" step="0.1" value="60" placeholder="60 %"></label>
               </div>
               <button type="submit">เพิ่ม</button>
             </form>
