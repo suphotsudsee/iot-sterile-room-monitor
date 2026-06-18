@@ -5,9 +5,14 @@
 #include <WiFiClientSecureBearSSL.h>
 #include <EEPROM.h>
 #include <DHT.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 #define DHT_PIN D4
 #define DHT_TYPE DHT11
+#define LCD_SDA_PIN D2
+#define LCD_SCL_PIN D1
+#define LCD_ADDRESS 0x27
 
 #define EEPROM_SIZE 768
 #define CONFIG_MAGIC 0x53484D31
@@ -22,11 +27,29 @@ struct DeviceConfig {
 };
 
 DHT dht(DHT_PIN, DHT_TYPE);
+LiquidCrystal_I2C lcd(LCD_ADDRESS, 16, 2);
 ESP8266WebServer webServer(80);
 DeviceConfig config;
 
 unsigned long lastSendAt = 0;
 const unsigned long SEND_INTERVAL_MS = 300000; // 5 minutes
+
+void lcdPrintLine(uint8_t row, String text) {
+  if (text.length() > 16) text = text.substring(0, 16);
+  lcd.setCursor(0, row);
+  lcd.print(text);
+  for (int i = text.length(); i < 16; i++) lcd.print(" ");
+}
+
+void showStatus(String line1, String line2) {
+  lcdPrintLine(0, line1);
+  lcdPrintLine(1, line2);
+}
+
+void showReading(float temperature, float humidity, String statusText) {
+  lcdPrintLine(0, "T:" + String(temperature, 1) + "C RH:" + String(humidity, 1) + "%");
+  lcdPrintLine(1, statusText);
+}
 
 String htmlEscape(String value) {
   value.replace("&", "&amp;");
@@ -114,6 +137,7 @@ void startSetupAccessPoint() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP("ESP-STERILE-SETUP", "12345678");
   startConfigServer();
+  showStatus("SETUP WIFI", "192.168.4.1");
   Serial.println("Setup WiFi started");
   Serial.println("SSID: ESP-STERILE-SETUP");
   Serial.println("Password: 12345678");
@@ -126,12 +150,14 @@ bool connectWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(config.wifiName, config.wifiPassword);
   Serial.print("Connecting WiFi");
+  showStatus("Connecting WiFi", config.wifiName);
 
   for (int i = 0; i < 40; i++) {
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println();
       Serial.print("Connected. ESP IP: ");
       Serial.println(WiFi.localIP());
+      showStatus("WiFi Connected", WiFi.localIP().toString());
       return true;
     }
     delay(500);
@@ -140,6 +166,7 @@ bool connectWiFi() {
 
   Serial.println();
   Serial.println("WiFi connect failed");
+  showStatus("WiFi Failed", "Open setup AP");
   return false;
 }
 
@@ -182,6 +209,7 @@ void sendReadingNow() {
 
   if (isnan(humidity) || isnan(temperature)) {
     Serial.println("DHT read failed");
+    showStatus("DHT read failed", "Check sensor");
     return;
   }
 
@@ -192,15 +220,27 @@ void sendReadingNow() {
   Serial.println(" %");
 
   if (WiFi.status() == WL_CONNECTED) {
-    postReading(temperature, humidity);
+    showReading(temperature, humidity, "Sending...");
+    int statusCode = postReading(temperature, humidity);
+    if (statusCode == 201 || statusCode == 200) {
+      showReading(temperature, humidity, "Server OK");
+    } else {
+      showReading(temperature, humidity, "POST " + String(statusCode));
+    }
   } else {
     Serial.println("WiFi disconnected");
+    showReading(temperature, humidity, "WiFi lost");
   }
 }
 
 void setup() {
   Serial.begin(115200);
   delay(200);
+
+  Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
+  lcd.init();
+  lcd.backlight();
+  showStatus("Sterile Monitor", "Starting...");
 
   dht.begin();
   loadConfig();

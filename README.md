@@ -190,6 +190,55 @@ Device Key
 POST status: 201
 ```
 
+## ต่อจอ LCD 16x2 I2C กับ ESP8266
+
+จอ LCD ในรูปเป็น LCD 16x2 พร้อม I2C backpack ใช้แสดงค่า Temp/RH และสถานะส่งข้อมูล
+
+ติดตั้ง Arduino library:
+
+```text
+LiquidCrystal I2C
+```
+
+การต่อสายกับ NodeMCU ESP8266:
+
+```text
+LCD GND -> GND
+LCD VCC -> 3V3 หรือ VIN/5V ตามจอที่ใช้
+LCD SDA -> D2
+LCD SCL -> D1
+```
+
+ค่าเริ่มต้นในโค้ด:
+
+```cpp
+#define LCD_SDA_PIN D2
+#define LCD_SCL_PIN D1
+#define LCD_ADDRESS 0x27
+```
+
+ถ้าจอไม่ขึ้นแต่ไฟติด ให้ลองเปลี่ยน address เป็น:
+
+```cpp
+#define LCD_ADDRESS 0x3F
+```
+
+ข้อความที่จอจะแสดง:
+
+```text
+T:23.4C RH:55.2%
+Server OK
+```
+
+หรือสถานะอื่น เช่น:
+
+```text
+Connecting WiFi
+SETUP WIFI / 192.168.4.1
+DHT read failed
+POST -1
+```
+
 ## วิธีเพิ่มผู้ใช้ให้แต่ละโรงพยาบาล
 
 Login ด้วย `system_admin` แล้วทำตามนี้:
