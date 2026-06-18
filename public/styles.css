@@ -493,7 +493,7 @@ h3 {
 
 .bottom {
   display: grid;
-  grid-template-columns: 1.6fr 1.05fr 0.9fr;
+  grid-template-columns: 1.5fr 1fr;
   gap: 12px;
   margin-top: 14px;
 }
@@ -541,17 +541,6 @@ h3 {
   border-bottom: 2px dotted var(--blue);
   text-align: center;
   min-height: 22px;
-}
-
-.signature p {
-  display: grid;
-  grid-template-columns: 86px 1fr;
-  gap: 10px;
-  margin: 7px 0 13px;
-}
-
-.signature span {
-  border-bottom: 2px dotted #555;
 }
 
 footer {
