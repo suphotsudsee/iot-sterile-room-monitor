@@ -15,7 +15,7 @@
 #define LCD_ADDRESS 0x27
 
 #define EEPROM_SIZE 768
-#define CONFIG_MAGIC 0x53484D31
+#define CONFIG_MAGIC 0x53484D32
 
 struct DeviceConfig {
   uint32_t magic;
@@ -33,6 +33,8 @@ DeviceConfig config;
 
 unsigned long lastSendAt = 0;
 const unsigned long SEND_INTERVAL_MS = 300000; // 5 minutes
+
+void saveConfig();
 
 void lcdPrintLine(uint8_t row, String text) {
   if (text.length() > 16) text = text.substring(0, 16);
@@ -68,6 +70,13 @@ bool hasConfig() {
   return config.magic == CONFIG_MAGIC && strlen(config.wifiName) > 0 && strlen(config.serverUrl) > 0;
 }
 
+bool isPrintableAscii(const char* value, size_t size) {
+  for (size_t i = 0; i < size && value[i] != '\0'; i++) {
+    if (value[i] < 32 || value[i] > 126) return false;
+  }
+  return true;
+}
+
 void loadConfig() {
   EEPROM.begin(EEPROM_SIZE);
   EEPROM.get(0, config);
@@ -77,6 +86,17 @@ void loadConfig() {
     copyField(config.deviceId, sizeof(config.deviceId), "ESP-STERILE-ROOM-01");
     copyField(config.deviceKey, sizeof(config.deviceKey), "");
     copyField(config.serverUrl, sizeof(config.serverUrl), "http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io/api/readings");
+    saveConfig();
+    return;
+  }
+
+  if (!isPrintableAscii(config.wifiName, sizeof(config.wifiName))) copyField(config.wifiName, sizeof(config.wifiName), "");
+  if (!isPrintableAscii(config.wifiPassword, sizeof(config.wifiPassword))) copyField(config.wifiPassword, sizeof(config.wifiPassword), "");
+  if (!isPrintableAscii(config.serverUrl, sizeof(config.serverUrl))) copyField(config.serverUrl, sizeof(config.serverUrl), "http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io/api/readings");
+  if (!isPrintableAscii(config.deviceId, sizeof(config.deviceId))) copyField(config.deviceId, sizeof(config.deviceId), "ESP-STERILE-ROOM-01");
+  if (!isPrintableAscii(config.deviceKey, sizeof(config.deviceKey))) {
+    copyField(config.deviceKey, sizeof(config.deviceKey), "");
+    saveConfig();
   }
 }
 

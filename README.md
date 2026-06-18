@@ -190,6 +190,8 @@ Device Key
 POST status: 201
 ```
 
+ถ้าหน้า setup แสดง `Device Key` เป็นตัวอักษรเพี้ยน ให้อัปโหลดโค้ดเวอร์ชันล่าสุดนี้ใหม่ ESP จะล้างค่า key ที่เสียใน EEPROM ให้ แล้วให้กรอก Device Key ใหม่จาก dashboard
+
 ## ต่อจอ LCD 16x2 I2C กับ ESP8266
 
 จอ LCD ในรูปเป็น LCD 16x2 พร้อม I2C backpack ใช้แสดงค่า Temp/RH และสถานะส่งข้อมูล
