@@ -64,6 +64,10 @@ function selectedRoom() {
   return state.rooms.find(room => room.id === selectedRoomId());
 }
 
+function selectedHospital() {
+  return state.hospitals.find(hospital => hospital.id === selectedHospitalId());
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -269,11 +273,21 @@ function renderSelectors() {
   $("#roomForm").classList.toggle("hidden", !canManage);
   $("#deviceForm").classList.toggle("hidden", !canManage);
   $("#userForm").classList.toggle("hidden", !canManage);
+  $("#alertSettingsForm").classList.toggle("hidden", !canManage);
   $("#userRoleSelect").innerHTML = state.user?.role === "system_admin"
     ? `<option value="hospital_admin">ผู้ดูแล รพ.</option><option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`
     : `<option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`;
   const rooms = state.rooms.filter(item => item.hospitalId === selectedHospitalId());
   $("#roomSelect").innerHTML = rooms.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
+  renderAlertSettings();
+}
+
+function renderAlertSettings() {
+  const hospital = selectedHospital();
+  if (!hospital || !$("#alertSettingsForm")) return;
+  $("#alertSettingsForm").elements.alertWebhookUrl.value = hospital.alertWebhookUrl || "";
+  $("#alertSettingsForm").elements.alertWebhookToken.value = hospital.alertWebhookToken || "";
+  $("#alertSettingsForm").elements.alertCooldownMinutes.value = hospital.alertCooldownMinutes ?? 30;
 }
 
 function renderDevices() {
@@ -447,6 +461,29 @@ $("#userForm").addEventListener("submit", async event => {
   });
   event.currentTarget.reset();
   await refreshAll();
+});
+
+$("#alertSettingsForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  await api("/api/hospitals/alert-settings", {
+    method: "POST",
+    body: JSON.stringify({
+      hospitalId: selectedHospitalId(),
+      alertWebhookUrl: form.get("alertWebhookUrl"),
+      alertWebhookToken: form.get("alertWebhookToken"),
+      alertCooldownMinutes: Number(form.get("alertCooldownMinutes"))
+    })
+  });
+  await refreshAll();
+});
+
+$("#testAlertButton").addEventListener("click", async () => {
+  await api(`/api/notifications/test?hospitalId=${encodeURIComponent(selectedHospitalId())}`, {
+    method: "POST",
+    body: "{}"
+  });
+  alert("ส่งทดสอบแจ้งเตือนแล้ว");
 });
 
 $("#manualForm").addEventListener("submit", async event => {

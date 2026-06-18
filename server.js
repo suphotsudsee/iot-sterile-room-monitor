@@ -126,6 +126,9 @@ async function loadDb() {
           id: hospitalId,
           name: "โรงพยาบาลตัวอย่าง",
           code: "DEMO-HOSPITAL",
+          alertWebhookUrl: "",
+          alertWebhookToken: "",
+          alertCooldownMinutes: 30,
           createdAt: nowIso()
         }
       ],
@@ -216,6 +219,16 @@ function cleanUser(user) {
   };
 }
 
+function cleanHospitalForUser(hospital, user) {
+  const clean = { ...hospital };
+  if (!canManageTenant(user, hospital.id)) {
+    delete clean.alertWebhookUrl;
+    delete clean.alertWebhookToken;
+    delete clean.alertCooldownMinutes;
+  }
+  return clean;
+}
+
 async function requireUser(req, res) {
   const sid = parseCookies(req).sid;
   const session = sessions.get(sid);
@@ -253,10 +266,18 @@ function makeAlertMessage(reading, room, device) {
   return `${device.name}: ${parts.join(", ")}`;
 }
 
-function shouldSendNotification(db, alert) {
-  if (!ALERT_WEBHOOK_URL) return false;
-  if (!Number.isFinite(ALERT_COOLDOWN_MINUTES) || ALERT_COOLDOWN_MINUTES <= 0) return true;
-  const cutoff = Date.now() - ALERT_COOLDOWN_MINUTES * 60 * 1000;
+function hospitalNotificationConfig(hospital) {
+  return {
+    url: hospital?.alertWebhookUrl || ALERT_WEBHOOK_URL,
+    token: hospital?.alertWebhookToken || ALERT_WEBHOOK_TOKEN,
+    cooldownMinutes: Number(hospital?.alertCooldownMinutes ?? ALERT_COOLDOWN_MINUTES)
+  };
+}
+
+function shouldSendNotification(db, alert, config) {
+  if (!config.url) return false;
+  if (!Number.isFinite(config.cooldownMinutes) || config.cooldownMinutes <= 0) return true;
+  const cutoff = Date.now() - config.cooldownMinutes * 60 * 1000;
   return !db.alerts.some(item =>
     item.id !== alert.id
     && item.deviceId === alert.deviceId
@@ -266,8 +287,8 @@ function shouldSendNotification(db, alert) {
   );
 }
 
-async function sendAlertNotification({ alert, reading, hospital, room, device }) {
-  if (!ALERT_WEBHOOK_URL) return { skipped: true };
+async function sendAlertNotification({ alert, reading, hospital, room, device, config = hospitalNotificationConfig(hospital) }) {
+  if (!config.url) return { skipped: true };
   const payload = {
     event: "sterile_room_alert",
     level: alert.level,
@@ -282,8 +303,8 @@ async function sendAlertNotification({ alert, reading, hospital, room, device })
     appUrl: APP_PUBLIC_URL
   };
   const headers = { "content-type": "application/json" };
-  if (ALERT_WEBHOOK_TOKEN) headers.authorization = `Bearer ${ALERT_WEBHOOK_TOKEN}`;
-  const response = await fetch(ALERT_WEBHOOK_URL, {
+  if (config.token) headers.authorization = `Bearer ${config.token}`;
+  const response = await fetch(config.url, {
     method: "POST",
     headers,
     body: JSON.stringify(payload)
@@ -351,6 +372,7 @@ async function handleApi(req, res, url) {
 
       const room = db.rooms.find(item => item.id === device.roomId);
       const hospital = db.hospitals.find(item => item.id === device.hospitalId);
+      const notificationConfig = hospitalNotificationConfig(hospital);
       const reading = {
         id: id("read"),
         hospitalId: device.hospitalId,
@@ -381,9 +403,9 @@ async function handleApi(req, res, url) {
           createdAt: nowIso()
         };
         db.alerts.push(alert);
-        if (shouldSendNotification(db, alert)) {
+        if (shouldSendNotification(db, alert, notificationConfig)) {
           try {
-            await sendAlertNotification({ alert, reading, hospital, room, device });
+            await sendAlertNotification({ alert, reading, hospital, room, device, config: notificationConfig });
             alert.notificationSentAt = nowIso();
           } catch (error) {
             alert.notificationError = error.message || "Notification failed";
@@ -403,7 +425,7 @@ async function handleApi(req, res, url) {
     const hospitalIds = visibleHospitalIds(user, db);
     return json(res, 200, {
       user: cleanSessionUser(user),
-      hospitals: db.hospitals.filter(item => hospitalIds.includes(item.id)),
+      hospitals: db.hospitals.filter(item => hospitalIds.includes(item.id)).map(item => cleanHospitalForUser(item, user)),
       rooms: db.rooms.filter(item => hospitalIds.includes(item.hospitalId)),
       devices: db.devices.filter(item => hospitalIds.includes(item.hospitalId)).map(item => ({ ...item, deviceKey: item.deviceKey })),
       alerts: db.alerts.filter(item => hospitalIds.includes(item.hospitalId) && !item.acknowledgedAt).slice(-50).reverse(),
@@ -419,11 +441,29 @@ async function handleApi(req, res, url) {
         id: id("hosp"),
         name: String(payload.name || "").trim(),
         code: String(payload.code || "").trim() || `HOSP-${db.hospitals.length + 1}`,
+        alertWebhookUrl: "",
+        alertWebhookToken: "",
+        alertCooldownMinutes: 30,
         createdAt: nowIso()
       };
       if (!hospital.name) return json(res, 400, { error: "Hospital name is required" });
       db.hospitals.push(hospital);
       return json(res, 201, { hospital });
+    });
+  }
+
+  if (url.pathname === "/api/hospitals/alert-settings" && req.method === "POST") {
+    const payload = await readJson(req);
+    const hospitalId = String(payload.hospitalId || "");
+    if (!canManageTenant(user, hospitalId)) return json(res, 403, { error: "Forbidden" });
+    return withDb(db => {
+      const hospital = db.hospitals.find(item => item.id === hospitalId);
+      if (!hospital) return json(res, 404, { error: "Hospital not found" });
+      hospital.alertWebhookUrl = String(payload.alertWebhookUrl || "").trim();
+      hospital.alertWebhookToken = String(payload.alertWebhookToken || "").trim();
+      const cooldown = Number(payload.alertCooldownMinutes);
+      hospital.alertCooldownMinutes = Number.isFinite(cooldown) && cooldown >= 0 ? cooldown : 30;
+      return json(res, 200, { hospital });
     });
   }
 
@@ -545,11 +585,13 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === "/api/notifications/test" && req.method === "POST") {
     if (!["system_admin", "hospital_admin"].includes(user.role)) return json(res, 403, { error: "Forbidden" });
-    if (!ALERT_WEBHOOK_URL) return json(res, 400, { error: "ALERT_WEBHOOK_URL is not configured" });
     const db = await loadDb();
     const hospital = user.role === "system_admin"
-      ? db.hospitals[0]
+      ? db.hospitals.find(item => item.id === url.searchParams.get("hospitalId")) || db.hospitals[0]
       : db.hospitals.find(item => item.id === user.hospitalId);
+    if (!canManageTenant(user, hospital?.id)) return json(res, 403, { error: "Forbidden" });
+    const notificationConfig = hospitalNotificationConfig(hospital);
+    if (!notificationConfig.url) return json(res, 400, { error: "Webhook URL is not configured for this hospital" });
     const room = db.rooms.find(item => item.hospitalId === hospital?.id);
     const device = db.devices.find(item => item.roomId === room?.id);
     const reading = {
@@ -562,7 +604,7 @@ async function handleApi(req, res, url) {
       level: "critical",
       message: "ทดสอบแจ้งเตือน Temp/RH ผิดเกณฑ์"
     };
-    await sendAlertNotification({ alert, reading, hospital, room, device });
+    await sendAlertNotification({ alert, reading, hospital, room, device, config: notificationConfig });
     return json(res, 200, { ok: true });
   }
 

@@ -217,7 +217,7 @@ button {
 
 .management-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   margin-top: 12px;
   align-items: stretch;
@@ -239,6 +239,10 @@ button {
   width: 100%;
   min-height: 46px;
   padding: 0 14px;
+}
+
+.secondary-button {
+  background: #526174 !important;
 }
 
 .small-grid {

@@ -93,6 +93,14 @@
               </select>
               <button type="submit">เพิ่มผู้ใช้</button>
             </form>
+            <form id="alertSettingsForm">
+              <h3>แจ้งเตือนของ รพ.</h3>
+              <input name="alertWebhookUrl" placeholder="Webhook URL ของ รพ. นี้">
+              <input name="alertWebhookToken" placeholder="Token ถ้ามี">
+              <input name="alertCooldownMinutes" type="number" min="0" step="1" value="30" placeholder="แจ้งซ้ำทุกกี่นาที">
+              <button type="submit">บันทึกแจ้งเตือน</button>
+              <button id="testAlertButton" class="secondary-button" type="button">ทดสอบแจ้งเตือน</button>
+            </form>
           </div>
         </details>
       </section>

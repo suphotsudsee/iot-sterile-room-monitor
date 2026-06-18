@@ -88,14 +88,23 @@ ALERT_COOLDOWN_MINUTES=30
 
 9. Deploy
 
-## ระบบแจ้งเตือน
+## ระบบแจ้งเตือนแยกตามโรงพยาบาล
 
 เมื่อ ESP ส่งค่าเข้ามาแล้ว Temp/RH ผิดเกณฑ์ ระบบจะ:
 
 1. บันทึก alert ในหน้าเว็บ
-2. ส่ง webhook ไปยัง `ALERT_WEBHOOK_URL` ถ้าตั้งค่าไว้
+2. ส่ง webhook ไปยัง URL ของโรงพยาบาลนั้น ถ้าตั้งค่าไว้
 
-ตั้งค่าใน Coolify:
+ตั้งค่าในหน้าเว็บ:
+
+1. Login ด้วย `system_admin` หรือ `hospital_admin`
+2. เลือกโรงพยาบาล
+3. ไปที่ `แจ้งเตือนของ รพ.`
+4. ใส่ `Webhook URL`, `Token` ถ้ามี, และ cooldown
+5. กด `บันทึกแจ้งเตือน`
+6. กด `ทดสอบแจ้งเตือน` เพื่อตรวจว่า webhook รับข้อความได้
+
+ค่าใน Coolify ด้านล่างเป็น fallback กลาง ถ้าโรงพยาบาลนั้นยังไม่ได้ตั้ง webhook ของตัวเอง:
 
 ```text
 ALERT_WEBHOOK_URL=https://your-webhook-url
@@ -122,10 +131,10 @@ Payload ที่ส่งไป webhook:
 }
 ```
 
-ถ้าต้องการทดสอบ webhook ให้ login ด้วย `system_admin` หรือ `hospital_admin` แล้วเรียก:
+ถ้าต้องการทดสอบ webhook ด้วย API ให้ login ด้วย `system_admin` หรือ `hospital_admin` แล้วเรียก:
 
 ```text
-POST /api/notifications/test
+POST /api/notifications/test?hospitalId=HOSPITAL_ID
 ```
 
 ค่า `ALERT_COOLDOWN_MINUTES=30` หมายถึง alert ระดับเดิมจากอุปกรณ์เดิมจะไม่ส่งซ้ำถี่เกิน 30 นาที แต่ในหน้าเว็บยังบันทึก alert ทุกครั้ง
