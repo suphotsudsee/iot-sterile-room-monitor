@@ -11,7 +11,7 @@
 - สร้าง Device Key ให้ ESP
 - รับข้อมูลผ่าน `POST /api/readings`
 - แยกข้อมูลตามโรงพยาบาลและห้อง
-- แจ้งเตือนเมื่อ Temp/RH ผิดเกณฑ์
+- แจ้งเตือนในเว็บและส่ง Webhook เมื่อ Temp/RH ผิดเกณฑ์
 - Export รายงานรายเดือนเป็น CSV
 - เก็บข้อมูลใน database file ที่ mount อยู่ใน `/app/data`
 
@@ -80,9 +80,55 @@ PORT=3000
 DATA_DIR=/app/data
 ADMIN_EMAIL=admin@phoubon.in.th
 ADMIN_PASSWORD=ตั้งรหัสจริง
+APP_PUBLIC_URL=http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io
+ALERT_WEBHOOK_URL=
+ALERT_WEBHOOK_TOKEN=
+ALERT_COOLDOWN_MINUTES=30
 ```
 
 9. Deploy
+
+## ระบบแจ้งเตือน
+
+เมื่อ ESP ส่งค่าเข้ามาแล้ว Temp/RH ผิดเกณฑ์ ระบบจะ:
+
+1. บันทึก alert ในหน้าเว็บ
+2. ส่ง webhook ไปยัง `ALERT_WEBHOOK_URL` ถ้าตั้งค่าไว้
+
+ตั้งค่าใน Coolify:
+
+```text
+ALERT_WEBHOOK_URL=https://your-webhook-url
+ALERT_WEBHOOK_TOKEN=optional-secret-token
+ALERT_COOLDOWN_MINUTES=30
+APP_PUBLIC_URL=http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io
+```
+
+Payload ที่ส่งไป webhook:
+
+```json
+{
+  "event": "sterile_room_alert",
+  "level": "critical",
+  "message": "ESP-STERILE-ROOM-01: Temp สูง 29.1°C, RH สูง 72.4%",
+  "hospital": "ชื่อโรงพยาบาล",
+  "room": "ชื่อห้อง",
+  "device": "ชื่ออุปกรณ์",
+  "deviceId": "ESP-STERILE-ROOM-01",
+  "temperature": 29.1,
+  "humidity": 72.4,
+  "timestamp": "2026-06-18T00:00:00.000Z",
+  "appUrl": "http://..."
+}
+```
+
+ถ้าต้องการทดสอบ webhook ให้ login ด้วย `system_admin` หรือ `hospital_admin` แล้วเรียก:
+
+```text
+POST /api/notifications/test
+```
+
+ค่า `ALERT_COOLDOWN_MINUTES=30` หมายถึง alert ระดับเดิมจากอุปกรณ์เดิมจะไม่ส่งซ้ำถี่เกิน 30 นาที แต่ในหน้าเว็บยังบันทึก alert ทุกครั้ง
 
 ## วิธีเพิ่ม ESP ให้โรงพยาบาล
 

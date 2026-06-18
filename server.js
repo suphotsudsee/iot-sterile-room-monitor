@@ -12,6 +12,10 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@phoubon.in.th";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
+const ALERT_WEBHOOK_TOKEN = process.env.ALERT_WEBHOOK_TOKEN || "";
+const ALERT_COOLDOWN_MINUTES = Number(process.env.ALERT_COOLDOWN_MINUTES || 30);
+const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL || "";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -249,6 +253,47 @@ function makeAlertMessage(reading, room, device) {
   return `${device.name}: ${parts.join(", ")}`;
 }
 
+function shouldSendNotification(db, alert) {
+  if (!ALERT_WEBHOOK_URL) return false;
+  if (!Number.isFinite(ALERT_COOLDOWN_MINUTES) || ALERT_COOLDOWN_MINUTES <= 0) return true;
+  const cutoff = Date.now() - ALERT_COOLDOWN_MINUTES * 60 * 1000;
+  return !db.alerts.some(item =>
+    item.id !== alert.id
+    && item.deviceId === alert.deviceId
+    && item.level === alert.level
+    && item.notificationSentAt
+    && new Date(item.notificationSentAt).getTime() >= cutoff
+  );
+}
+
+async function sendAlertNotification({ alert, reading, hospital, room, device }) {
+  if (!ALERT_WEBHOOK_URL) return { skipped: true };
+  const payload = {
+    event: "sterile_room_alert",
+    level: alert.level,
+    message: alert.message,
+    hospital: hospital?.name || "",
+    room: room?.name || "",
+    device: device?.name || "",
+    deviceId: device?.deviceId || "",
+    temperature: reading.temperature,
+    humidity: reading.humidity,
+    timestamp: reading.timestamp,
+    appUrl: APP_PUBLIC_URL
+  };
+  const headers = { "content-type": "application/json" };
+  if (ALERT_WEBHOOK_TOKEN) headers.authorization = `Bearer ${ALERT_WEBHOOK_TOKEN}`;
+  const response = await fetch(ALERT_WEBHOOK_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    throw new Error(`Webhook failed: ${response.status}`);
+  }
+  return { ok: true };
+}
+
 async function handleAuth(req, res, url) {
   if (url.pathname === "/api/login" && req.method === "POST") {
     const payload = await readJson(req);
@@ -297,7 +342,7 @@ async function handleApi(req, res, url) {
       return json(res, 400, { error: "Required: temperature, humidity, optional timestamp" });
     }
 
-    return withDb(db => {
+    return withDb(async db => {
       const key = String(payload.deviceKey || "");
       const payloadDeviceId = String(payload.deviceId || payload.device || "");
       const device = db.devices.find(item => item.deviceKey === key)
@@ -305,6 +350,7 @@ async function handleApi(req, res, url) {
       if (!device) return json(res, 403, { error: "Unknown device. Register device key first." });
 
       const room = db.rooms.find(item => item.id === device.roomId);
+      const hospital = db.hospitals.find(item => item.id === device.hospitalId);
       const reading = {
         id: id("read"),
         hospitalId: device.hospitalId,
@@ -321,7 +367,7 @@ async function handleApi(req, res, url) {
 
       const level = room ? alertLevel(reading, room) : "normal";
       if (level !== "normal" && room) {
-        db.alerts.push({
+        const alert = {
           id: id("alert"),
           hospitalId: device.hospitalId,
           roomId: device.roomId,
@@ -330,8 +376,20 @@ async function handleApi(req, res, url) {
           level,
           message: makeAlertMessage(reading, room, device),
           acknowledgedAt: null,
+          notificationSentAt: null,
+          notificationError: null,
           createdAt: nowIso()
-        });
+        };
+        db.alerts.push(alert);
+        if (shouldSendNotification(db, alert)) {
+          try {
+            await sendAlertNotification({ alert, reading, hospital, room, device });
+            alert.notificationSentAt = nowIso();
+          } catch (error) {
+            alert.notificationError = error.message || "Notification failed";
+            console.error(alert.notificationError);
+          }
+        }
       }
       return json(res, 201, { ok: true, reading, alertLevel: level });
     });
@@ -483,6 +541,29 @@ async function handleApi(req, res, url) {
       alert.acknowledgedAt = nowIso();
       return json(res, 200, { alert });
     });
+  }
+
+  if (url.pathname === "/api/notifications/test" && req.method === "POST") {
+    if (!["system_admin", "hospital_admin"].includes(user.role)) return json(res, 403, { error: "Forbidden" });
+    if (!ALERT_WEBHOOK_URL) return json(res, 400, { error: "ALERT_WEBHOOK_URL is not configured" });
+    const db = await loadDb();
+    const hospital = user.role === "system_admin"
+      ? db.hospitals[0]
+      : db.hospitals.find(item => item.id === user.hospitalId);
+    const room = db.rooms.find(item => item.hospitalId === hospital?.id);
+    const device = db.devices.find(item => item.roomId === room?.id);
+    const reading = {
+      temperature: 29.1,
+      humidity: 72.4,
+      timestamp: nowIso()
+    };
+    const alert = {
+      id: id("alert_test"),
+      level: "critical",
+      message: "ทดสอบแจ้งเตือน Temp/RH ผิดเกณฑ์"
+    };
+    await sendAlertNotification({ alert, reading, hospital, room, device });
+    return json(res, 200, { ok: true });
   }
 
   if (url.pathname === "/api/reports/monthly.csv" && req.method === "GET") {
