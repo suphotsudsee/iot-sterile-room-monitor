@@ -111,6 +111,25 @@ function overallLevel(day) {
   return "normal";
 }
 
+function levelRank(level) {
+  return { normal: 0, caution: 1, high: 2, critical: 3 }[level] ?? -1;
+}
+
+function pickDailyDisplayValue(items, getValue, getLevel) {
+  if (!items.length) return null;
+  const sorted = [...items].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const latest = sorted[sorted.length - 1];
+  const abnormal = sorted
+    .map(item => ({ item, value: getValue(item), level: getLevel(getValue(item)) }))
+    .filter(entry => Number.isFinite(entry.value) && entry.level && entry.level !== "normal")
+    .sort((a, b) => {
+      const levelDiff = levelRank(b.level) - levelRank(a.level);
+      if (levelDiff) return levelDiff;
+      return new Date(b.item.timestamp) - new Date(a.item.timestamp);
+    })[0];
+  return abnormal ? abnormal.value : getValue(latest);
+}
+
 function groupDaily(readings, month) {
   const days = daysInMonth(month);
   const result = Array.from({ length: days }, (_, index) => ({
@@ -125,17 +144,16 @@ function groupDaily(readings, month) {
     const dt = new Date(reading.timestamp);
     const slot = result[dt.getDate() - 1];
     if (!slot) return;
-    slot.tempValues = slot.tempValues || [];
-    slot.rhValues = slot.rhValues || [];
-    slot.tempValues.push(Number(reading.temperature));
-    slot.rhValues.push(Number(reading.humidity));
+    slot.readings = slot.readings || [];
+    slot.readings.push(reading);
     slot.count += 1;
     slot.deviceName = reading.deviceName || slot.deviceName;
   });
 
   result.forEach(day => {
-    day.temperature = mean(day.tempValues || []);
-    day.humidity = mean(day.rhValues || []);
+    const items = day.readings || [];
+    day.temperature = pickDailyDisplayValue(items, item => Number(item.temperature), tempLevel);
+    day.humidity = pickDailyDisplayValue(items, item => Number(item.humidity), rhLevel);
   });
   return result;
 }
