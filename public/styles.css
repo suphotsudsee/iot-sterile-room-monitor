@@ -564,6 +564,47 @@ h3 {
   min-height: 22px;
 }
 
+.latest-readings {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #c9d8f2;
+}
+
+.latest-readings h4 {
+  margin: 0 0 8px;
+  color: var(--blue);
+  font-size: 16px;
+}
+
+.latest-readings-list {
+  display: grid;
+  gap: 4px;
+  max-height: 190px;
+  overflow: auto;
+}
+
+.latest-row {
+  display: grid;
+  grid-template-columns: 1.5fr 0.8fr 0.8fr;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #f4f8ff;
+  font-size: 13px;
+}
+
+.latest-head {
+  background: #e6efff;
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.latest-row b {
+  color: #071b4f;
+  text-align: right;
+}
+
 footer {
   margin-top: 12px;
   color: var(--blue);

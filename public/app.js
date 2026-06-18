@@ -227,6 +227,22 @@ function drawSummary(days) {
     + renderMetricSummary("ความชื้นสัมพัทธ์", "RH %", rhCounts);
 }
 
+function renderLatestReadings(readings) {
+  const latest = [...readings]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 12);
+
+  $("#latestReadingsList").innerHTML = latest.length
+    ? `<div class="latest-row latest-head">
+        <span>เวลา</span><span>Temp</span><span>RH</span>
+      </div>` + latest.map(reading => `<div class="latest-row">
+        <span>${new Date(reading.timestamp).toLocaleString("th-TH", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+        <b>${format(Number(reading.temperature))} °C</b>
+        <b>${format(Number(reading.humidity))} %</b>
+      </div>`).join("")
+    : "<p>ยังไม่มีค่าที่ส่งเข้ามา</p>";
+}
+
 function renderSelectors() {
   $("#hospitalSelect").innerHTML = state.hospitals.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
   $("#hospitalSelect").disabled = state.user?.role !== "system_admin";
@@ -312,6 +328,7 @@ async function loadDashboard() {
   drawGrid($("#tempGrid"), tempRows, days, day => day.temperature, tempLevel);
   drawGrid($("#humidityGrid"), rhRows, days, day => day.humidity, rhLevel);
   drawSummary(days);
+  renderLatestReadings(state.readings);
 
   const latest = [...state.readings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
   $("#deviceStatus").textContent = latest
