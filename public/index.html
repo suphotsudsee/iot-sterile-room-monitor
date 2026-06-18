@@ -56,7 +56,7 @@
 
       <section class="management panel">
         <details open>
-          <summary>จัดการโรงพยาบาล / ห้อง / อุปกรณ์</summary>
+          <summary>จัดการโรงพยาบาล / ห้อง / อุปกรณ์ / ผู้ใช้</summary>
           <div class="management-grid">
             <form id="hospitalForm">
               <h3>เพิ่มโรงพยาบาล</h3>
@@ -80,6 +80,18 @@
               <input name="name" placeholder="ชื่ออุปกรณ์" required>
               <input name="deviceId" placeholder="Device ID เช่น ESP-ROOM-01">
               <button type="submit">สร้าง Device Key</button>
+            </form>
+            <form id="userForm">
+              <h3>เพิ่มผู้ใช้</h3>
+              <input name="name" placeholder="ชื่อผู้ใช้" required>
+              <input name="email" type="email" placeholder="email" required>
+              <input name="password" type="password" placeholder="password" required>
+              <select name="role" id="userRoleSelect">
+                <option value="hospital_admin">ผู้ดูแล รพ.</option>
+                <option value="staff">เจ้าหน้าที่</option>
+                <option value="auditor">ผู้ตรวจสอบ</option>
+              </select>
+              <button type="submit">เพิ่มผู้ใช้</button>
             </form>
           </div>
         </details>
@@ -124,6 +136,11 @@
       <section class="devices panel">
         <h3>อุปกรณ์ ESP และ Device Key</h3>
         <div id="deviceList"></div>
+      </section>
+
+      <section class="devices panel">
+        <h3>ผู้ใช้ของโรงพยาบาล</h3>
+        <div id="userList"></div>
       </section>
 
       <section class="chart-panel panel">

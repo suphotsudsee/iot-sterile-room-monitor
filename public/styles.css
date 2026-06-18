@@ -217,7 +217,7 @@ button {
 
 .management-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   margin-top: 12px;
 }
@@ -249,6 +249,10 @@ button {
   align-items: center;
   padding: 8px 0;
   border-top: 1px solid #d4e0f5;
+}
+
+.user-row {
+  grid-template-columns: 220px 160px 1fr;
 }
 
 .device-row code {
@@ -571,5 +575,10 @@ code {
   .sheet {
     width: 100%;
     overflow-x: auto;
+  }
+
+  .management-grid,
+  .saas-toolbar {
+    grid-template-columns: 1fr;
   }
 }

@@ -4,6 +4,7 @@ const state = {
   rooms: [],
   devices: [],
   alerts: [],
+  users: [],
   readings: []
 };
 
@@ -215,6 +216,15 @@ function drawSummary(days) {
 
 function renderSelectors() {
   $("#hospitalSelect").innerHTML = state.hospitals.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
+  $("#hospitalSelect").disabled = state.user?.role !== "system_admin";
+  $("#hospitalForm").classList.toggle("hidden", state.user?.role !== "system_admin");
+  const canManage = ["system_admin", "hospital_admin"].includes(state.user?.role);
+  $("#roomForm").classList.toggle("hidden", !canManage);
+  $("#deviceForm").classList.toggle("hidden", !canManage);
+  $("#userForm").classList.toggle("hidden", !canManage);
+  $("#userRoleSelect").innerHTML = state.user?.role === "system_admin"
+    ? `<option value="hospital_admin">ผู้ดูแล รพ.</option><option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`
+    : `<option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`;
   const rooms = state.rooms.filter(item => item.hospitalId === selectedHospitalId());
   $("#roomSelect").innerHTML = rooms.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
 }
@@ -228,6 +238,26 @@ function renderDevices() {
         <code>${device.deviceKey}</code>
       </div>`).join("")
     : "<p>ยังไม่มีอุปกรณ์ในห้องนี้</p>";
+}
+
+function roleLabel(role) {
+  return {
+    system_admin: "ผู้ดูแลระบบ",
+    hospital_admin: "ผู้ดูแล รพ.",
+    staff: "เจ้าหน้าที่",
+    auditor: "ผู้ตรวจสอบ"
+  }[role] || role;
+}
+
+function renderUsers() {
+  const users = state.users.filter(item => item.hospitalId === selectedHospitalId());
+  $("#userList").innerHTML = users.length
+    ? users.map(user => `<div class="device-row user-row">
+        <b>${user.name}</b>
+        <span>${roleLabel(user.role)}</span>
+        <code>${user.email}</code>
+      </div>`).join("")
+    : "<p>ยังไม่มีผู้ใช้ของโรงพยาบาลนี้</p>";
 }
 
 function renderAlerts() {
@@ -259,6 +289,7 @@ async function loadDashboard() {
   $("#thaiYear").value = toThaiYear(month);
   renderStandards();
   renderDevices();
+  renderUsers();
   renderAlerts();
 
   const query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
@@ -347,6 +378,23 @@ $("#deviceForm").addEventListener("submit", async event => {
       roomId: selectedRoomId(),
       name: form.get("name"),
       deviceId: form.get("deviceId")
+    })
+  });
+  event.currentTarget.reset();
+  await refreshAll();
+});
+
+$("#userForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  await api("/api/users", {
+    method: "POST",
+    body: JSON.stringify({
+      hospitalId: selectedHospitalId(),
+      name: form.get("name"),
+      email: form.get("email"),
+      password: form.get("password"),
+      role: form.get("role")
     })
   });
   event.currentTarget.reset();

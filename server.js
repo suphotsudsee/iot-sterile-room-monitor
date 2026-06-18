@@ -191,6 +191,27 @@ function sameTenant(user, hospitalId) {
   return user.role === "system_admin" || user.hospitalId === hospitalId;
 }
 
+function canManageTenant(user, hospitalId) {
+  return user.role === "system_admin" || (user.role === "hospital_admin" && user.hospitalId === hospitalId);
+}
+
+function visibleHospitalIds(user, db) {
+  return user.role === "system_admin"
+    ? db.hospitals.map(item => item.id)
+    : [user.hospitalId].filter(Boolean);
+}
+
+function cleanUser(user) {
+  return {
+    id: user.id,
+    hospitalId: user.hospitalId,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt
+  };
+}
+
 async function requireUser(req, res) {
   const sid = parseCookies(req).sid;
   const session = sessions.get(sid);
@@ -321,15 +342,14 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === "/api/bootstrap" && req.method === "GET") {
     const db = await loadDb();
-    const hospitalIds = user.role === "system_admin"
-      ? db.hospitals.map(item => item.id)
-      : [user.hospitalId];
+    const hospitalIds = visibleHospitalIds(user, db);
     return json(res, 200, {
       user: cleanSessionUser(user),
       hospitals: db.hospitals.filter(item => hospitalIds.includes(item.id)),
       rooms: db.rooms.filter(item => hospitalIds.includes(item.hospitalId)),
       devices: db.devices.filter(item => hospitalIds.includes(item.hospitalId)).map(item => ({ ...item, deviceKey: item.deviceKey })),
-      alerts: db.alerts.filter(item => hospitalIds.includes(item.hospitalId) && !item.acknowledgedAt).slice(-50).reverse()
+      alerts: db.alerts.filter(item => hospitalIds.includes(item.hospitalId) && !item.acknowledgedAt).slice(-50).reverse(),
+      users: db.users.filter(item => item.role !== "system_admin" && hospitalIds.includes(item.hospitalId)).map(cleanUser)
     });
   }
 
@@ -351,7 +371,7 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === "/api/rooms" && req.method === "POST") {
     const payload = await readJson(req);
-    if (!sameTenant(user, payload.hospitalId)) return json(res, 403, { error: "Forbidden" });
+    if (!canManageTenant(user, payload.hospitalId)) return json(res, 403, { error: "Forbidden" });
     return withDb(db => {
       const room = {
         id: id("room"),
@@ -371,7 +391,7 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === "/api/devices" && req.method === "POST") {
     const payload = await readJson(req);
-    if (!sameTenant(user, payload.hospitalId)) return json(res, 403, { error: "Forbidden" });
+    if (!canManageTenant(user, payload.hospitalId)) return json(res, 403, { error: "Forbidden" });
     return withDb(db => {
       const room = db.rooms.find(item => item.id === payload.roomId && item.hospitalId === payload.hospitalId);
       if (!room) return json(res, 400, { error: "Room not found" });
@@ -391,13 +411,50 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (url.pathname === "/api/users" && req.method === "POST") {
+    const payload = await readJson(req);
+    const hospitalId = String(payload.hospitalId || "");
+    if (!canManageTenant(user, hospitalId)) return json(res, 403, { error: "Forbidden" });
+    return withDb(db => {
+      const hospital = db.hospitals.find(item => item.id === hospitalId);
+      if (!hospital) return json(res, 400, { error: "Hospital not found" });
+      const role = String(payload.role || "staff");
+      const allowedRoles = user.role === "system_admin"
+        ? ["hospital_admin", "staff", "auditor"]
+        : ["staff", "auditor"];
+      if (!allowedRoles.includes(role)) return json(res, 400, { error: "Role is not allowed" });
+      const email = String(payload.email || "").trim().toLowerCase();
+      if (!email || !String(payload.password || "").trim()) return json(res, 400, { error: "Email and password are required" });
+      if (db.users.some(item => item.email.toLowerCase() === email)) return json(res, 409, { error: "Email already exists" });
+      const newUser = {
+        id: id("usr"),
+        hospitalId,
+        name: String(payload.name || "").trim() || email,
+        email,
+        passwordHash: hashPassword(String(payload.password)),
+        role,
+        createdAt: nowIso()
+      };
+      db.users.push(newUser);
+      return json(res, 201, { user: cleanUser(newUser) });
+    });
+  }
+
+  if (url.pathname === "/api/users" && req.method === "GET") {
+    const db = await loadDb();
+    const hospitalIds = visibleHospitalIds(user, db);
+    return json(res, 200, {
+      users: db.users.filter(item => item.role !== "system_admin" && hospitalIds.includes(item.hospitalId)).map(cleanUser)
+    });
+  }
+
   if (url.pathname === "/api/readings" && req.method === "GET") {
     const month = url.searchParams.get("month") || monthKey(new Date());
     const hospitalId = url.searchParams.get("hospitalId");
     const roomId = url.searchParams.get("roomId");
     if (hospitalId && !sameTenant(user, hospitalId)) return json(res, 403, { error: "Forbidden" });
     const db = await loadDb();
-    const hospitalIds = user.role === "system_admin" ? db.hospitals.map(item => item.id) : [user.hospitalId];
+    const hospitalIds = visibleHospitalIds(user, db);
     const readings = db.readings.filter(item => {
       const dt = new Date(item.timestamp);
       return Number.isFinite(dt.getTime())
@@ -411,7 +468,7 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === "/api/alerts" && req.method === "GET") {
     const db = await loadDb();
-    const hospitalIds = user.role === "system_admin" ? db.hospitals.map(item => item.id) : [user.hospitalId];
+    const hospitalIds = visibleHospitalIds(user, db);
     return json(res, 200, {
       alerts: db.alerts.filter(item => hospitalIds.includes(item.hospitalId)).slice(-200).reverse()
     });
@@ -434,9 +491,13 @@ async function handleApi(req, res, url) {
     const roomId = url.searchParams.get("roomId");
     if (hospitalId && !sameTenant(user, hospitalId)) return json(res, 403, { error: "Forbidden" });
     const db = await loadDb();
+    const hospitalIds = visibleHospitalIds(user, db);
     const rows = db.readings.filter(item => {
       const dt = new Date(item.timestamp);
-      return monthKey(dt) === month && (!hospitalId || item.hospitalId === hospitalId) && (!roomId || item.roomId === roomId);
+      return monthKey(dt) === month
+        && hospitalIds.includes(item.hospitalId)
+        && (!hospitalId || item.hospitalId === hospitalId)
+        && (!roomId || item.roomId === roomId);
     });
     const csv = [
       "timestamp,hospital,room,device,temperature,humidity",
