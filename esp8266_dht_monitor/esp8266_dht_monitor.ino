@@ -46,9 +46,9 @@ void showStatus(String line1, String line2) {
   lcdPrintLine(1, line2);
 }
 
-void showReading(float temperature, float humidity, String statusText) {
-  lcdPrintLine(0, "T:" + String(temperature, 1) + "C RH:" + String(humidity, 1) + "%");
-  lcdPrintLine(1, statusText);
+void showReading(float temperature, float humidity) {
+  lcdPrintLine(0, "Temp: " + String(temperature, 1) + " C");
+  lcdPrintLine(1, "RH:   " + String(humidity, 1) + " %");
 }
 
 String htmlEscape(String value) {
@@ -220,16 +220,16 @@ void sendReadingNow() {
   Serial.println(" %");
 
   if (WiFi.status() == WL_CONNECTED) {
-    showReading(temperature, humidity, "Sending...");
+    showReading(temperature, humidity);
     int statusCode = postReading(temperature, humidity);
     if (statusCode == 201 || statusCode == 200) {
-      showReading(temperature, humidity, "Server OK");
+      showReading(temperature, humidity);
     } else {
-      showReading(temperature, humidity, "POST " + String(statusCode));
+      showReading(temperature, humidity);
     }
   } else {
     Serial.println("WiFi disconnected");
-    showReading(temperature, humidity, "WiFi lost");
+    showReading(temperature, humidity);
   }
 }
 
