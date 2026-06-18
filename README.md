@@ -205,15 +205,15 @@ LiquidCrystal I2C
 ```text
 LCD GND -> GND
 LCD VCC -> 3V3 หรือ VIN/5V ตามจอที่ใช้
-LCD SDA -> D2
-LCD SCL -> D1
+LCD SDA -> D5
+LCD SCL -> D6
 ```
 
 ค่าเริ่มต้นในโค้ด:
 
 ```cpp
-#define LCD_SDA_PIN D2
-#define LCD_SCL_PIN D1
+#define LCD_SDA_PIN D5
+#define LCD_SCL_PIN D6
 #define LCD_ADDRESS 0x27
 ```
 

@@ -10,8 +10,8 @@
 
 #define DHT_PIN D2
 #define DHT_TYPE DHT22
-#define LCD_SDA_PIN D6
-#define LCD_SCL_PIN D5
+#define LCD_SDA_PIN D5
+#define LCD_SCL_PIN D6
 #define LCD_ADDRESS 0x27
 
 #define EEPROM_SIZE 768
