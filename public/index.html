@@ -3,11 +3,24 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Temperature & Relative Humidity Monitoring</title>
+    <title>Sterile Room IoT SaaS</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <main class="sheet">
+    <section id="loginView" class="login-view">
+      <form id="loginForm" class="login-box">
+        <h1>Sterile Room Monitor</h1>
+        <p>ระบบติดตามอุณหภูมิและความชื้นสำหรับหลายโรงพยาบาล</p>
+        <label>Email</label>
+        <input name="email" type="email" value="admin@phoubon.in.th" required>
+        <label>Password</label>
+        <input name="password" type="password" value="admin123" required>
+        <button type="submit">Login</button>
+        <span id="loginError"></span>
+      </form>
+    </section>
+
+    <main id="appView" class="sheet hidden">
       <header class="hero">
         <div class="seal" aria-hidden="true">
           <div class="seal-mark">+</div>
@@ -15,7 +28,7 @@
         <div class="title-block">
           <h1>แบบบันทึกการติดตามอุณหภูมิและความชื้นสัมพัทธ์</h1>
           <p>(Temperature &amp; Relative Humidity Monitoring)</p>
-          <h2>ห้องเก็บเครื่องมือปราศจากเชื้อ (Sterile Storage Room)</h2>
+          <h2 id="roomTitle">Sterile Storage Room</h2>
         </div>
         <div class="month-card">
           <label>เดือน</label>
@@ -25,50 +38,74 @@
         </div>
       </header>
 
+      <section class="saas-toolbar panel">
+        <div>
+          <strong id="userLabel">-</strong>
+          <button id="logoutButton" type="button">Logout</button>
+        </div>
+        <label>
+          โรงพยาบาล
+          <select id="hospitalSelect"></select>
+        </label>
+        <label>
+          ห้อง
+          <select id="roomSelect"></select>
+        </label>
+        <a id="reportLink" class="button-link" href="#">Export CSV</a>
+      </section>
+
+      <section class="management panel">
+        <details open>
+          <summary>จัดการโรงพยาบาล / ห้อง / อุปกรณ์</summary>
+          <div class="management-grid">
+            <form id="hospitalForm">
+              <h3>เพิ่มโรงพยาบาล</h3>
+              <input name="name" placeholder="ชื่อโรงพยาบาล" required>
+              <input name="code" placeholder="รหัส เช่น HOSP-001">
+              <button type="submit">เพิ่ม</button>
+            </form>
+            <form id="roomForm">
+              <h3>เพิ่มห้อง</h3>
+              <input name="name" placeholder="ชื่อห้อง" required>
+              <div class="small-grid">
+                <input name="tempMin" type="number" step="0.1" value="20" placeholder="Temp min">
+                <input name="tempMax" type="number" step="0.1" value="24" placeholder="Temp max">
+                <input name="rhMin" type="number" step="0.1" value="30" placeholder="RH min">
+                <input name="rhMax" type="number" step="0.1" value="60" placeholder="RH max">
+              </div>
+              <button type="submit">เพิ่ม</button>
+            </form>
+            <form id="deviceForm">
+              <h3>เพิ่ม ESP</h3>
+              <input name="name" placeholder="ชื่ออุปกรณ์" required>
+              <input name="deviceId" placeholder="Device ID เช่น ESP-ROOM-01">
+              <button type="submit">สร้าง Device Key</button>
+            </form>
+          </div>
+        </details>
+      </section>
+
       <section class="standards panel">
         <div class="standard-copy">
           <div class="target" aria-hidden="true">◎</div>
           <div>
             <h3>เกณฑ์มาตรฐาน</h3>
-            <p>อุณหภูมิ <strong>20 - 24 °C</strong></p>
-            <p>ความชื้นสัมพัทธ์ (RH) <strong>30 - 60 %</strong></p>
+            <p>อุณหภูมิ <strong id="tempStandard">20 - 24 °C</strong></p>
+            <p>ความชื้นสัมพัทธ์ (RH) <strong id="rhStandard">30 - 60 %</strong></p>
           </div>
         </div>
-
         <div class="risk-scale">
           <h3>ระดับความเสี่ยง / สีสัญลักษณ์</h3>
           <div class="risk-cards">
-            <article class="risk normal">
-              <span></span>
-              <b>ปกติ (เขียว)</b>
-              <p>Temp 20-24 °C<br>RH 30-60 %</p>
-            </article>
-            <article class="risk caution">
-              <span></span>
-              <b>เฝ้าระวัง (เหลือง)</b>
-              <p>Temp 24.1-26 °C<br>RH 61-65 %</p>
-            </article>
-            <article class="risk high">
-              <span></span>
-              <b>เสี่ยงสูง (ส้ม)</b>
-              <p>Temp 26.1-28 °C<br>RH 66-70 %</p>
-            </article>
-            <article class="risk critical">
-              <span></span>
-              <b>วิกฤต (แดง)</b>
-              <p>Temp &gt; 28 °C<br>RH &gt; 70 %</p>
-            </article>
+            <article class="risk normal"><span></span><b>ปกติ</b><p>อยู่ในเกณฑ์</p></article>
+            <article class="risk caution"><span></span><b>เฝ้าระวัง</b><p>เกินเกณฑ์ห้อง</p></article>
+            <article class="risk high"><span></span><b>เสี่ยงสูง</b><p>Temp &gt; 26 / RH &gt; 65</p></article>
+            <article class="risk critical"><span></span><b>วิกฤต</b><p>Temp &gt; 28 / RH &gt; 70</p></article>
           </div>
         </div>
-
         <aside class="actions">
-          <h3>แนวทางเมื่อผิดปกติ</h3>
-          <ul>
-            <li>ตรวจสอบเครื่องลดความชื้น / แอร์</li>
-            <li>ตรวจสอบการเปิด-ปิดประตู</li>
-            <li>บันทึกเหตุการณ์และการแก้ไข</li>
-            <li>แยกห่อและ Reprocess เมื่อจำเป็น</li>
-          </ul>
+          <h3>แจ้งเตือนล่าสุด</h3>
+          <div id="alertList" class="alert-list"></div>
         </aside>
       </section>
 
@@ -80,8 +117,13 @@
         <form id="manualForm" class="manual-form">
           <input name="temperature" type="number" step="0.1" placeholder="Temp °C" required>
           <input name="humidity" type="number" step="0.1" placeholder="RH %" required>
-          <button type="submit">เพิ่มข้อมูลทดสอบ</button>
+          <button type="submit">ส่งข้อมูลทดสอบ</button>
         </form>
+      </section>
+
+      <section class="devices panel">
+        <h3>อุปกรณ์ ESP และ Device Key</h3>
+        <div id="deviceList"></div>
       </section>
 
       <section class="chart-panel panel">
@@ -125,7 +167,7 @@
       </section>
 
       <footer>
-        หมายเหตุ : ระบบรับข้อมูลจาก ESP ผ่าน <code>POST /api/readings</code> และคำนวณสรุปจากข้อมูลในเดือนที่เลือก
+        ESP ส่งข้อมูลมาที่ <code id="serverUrlText"></code> พร้อม <code>deviceKey</code> ของอุปกรณ์
       </footer>
     </main>
 

@@ -18,6 +18,7 @@ struct DeviceConfig {
   char wifiPassword[64];
   char serverUrl[180];
   char deviceId[48];
+  char deviceKey[64];
 };
 
 DHT dht(DHT_PIN, DHT_TYPE);
@@ -51,7 +52,8 @@ void loadConfig() {
     memset(&config, 0, sizeof(config));
     config.magic = CONFIG_MAGIC;
     copyField(config.deviceId, sizeof(config.deviceId), "ESP-STERILE-ROOM-01");
-    copyField(config.serverUrl, sizeof(config.serverUrl), "https://sterile.phoubon.in.th/api/readings");
+    copyField(config.deviceKey, sizeof(config.deviceKey), "");
+    copyField(config.serverUrl, sizeof(config.serverUrl), "http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io/api/readings");
   }
 }
 
@@ -78,6 +80,7 @@ String configPage(String message = "") {
   page += "<label>WiFi Password</label><input name='wifiPassword' type='password' value='" + htmlEscape(config.wifiPassword) + "'>";
   page += "<label>Server URL</label><input name='serverUrl' value='" + htmlEscape(config.serverUrl) + "' required>";
   page += "<label>Device ID</label><input name='deviceId' value='" + htmlEscape(config.deviceId) + "' required>";
+  page += "<label>Device Key</label><input name='deviceKey' value='" + htmlEscape(config.deviceKey) + "' placeholder='copy from web dashboard'>";
   page += "<button type='submit'>Save & Restart</button></form>";
   page += "<p>Current ESP IP: " + WiFi.localIP().toString() + "</p>";
   page += "</body></html>";
@@ -93,6 +96,7 @@ void handleSave() {
   copyField(config.wifiPassword, sizeof(config.wifiPassword), webServer.arg("wifiPassword"));
   copyField(config.serverUrl, sizeof(config.serverUrl), webServer.arg("serverUrl"));
   copyField(config.deviceId, sizeof(config.deviceId), webServer.arg("deviceId"));
+  copyField(config.deviceKey, sizeof(config.deviceKey), webServer.arg("deviceKey"));
   saveConfig();
   webServer.send(200, "text/html; charset=utf-8", configPage("Saved. ESP will restart now."));
   delay(1000);
@@ -159,6 +163,7 @@ int postReading(float temperature, float humidity) {
 
   String body = "{";
   body += "\"deviceId\":\"" + String(config.deviceId) + "\",";
+  body += "\"deviceKey\":\"" + String(config.deviceKey) + "\",";
   body += "\"temperature\":" + String(temperature, 1) + ",";
   body += "\"humidity\":" + String(humidity, 1);
   body += "}";

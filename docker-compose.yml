@@ -6,7 +6,8 @@ services:
     environment:
       PORT: "3000"
       DATA_DIR: /app/data
-      SEED_DEMO_DATA: "false"
+      ADMIN_EMAIL: admin@phoubon.in.th
+      ADMIN_PASSWORD: admin123
     volumes:
       - sterile-room-monitor-data:/app/data
     restart: unless-stopped
