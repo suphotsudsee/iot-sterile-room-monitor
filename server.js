@@ -128,6 +128,8 @@ async function loadDb() {
           code: "DEMO-HOSPITAL",
           alertWebhookUrl: "",
           alertWebhookToken: "",
+          lineChannelAccessToken: "",
+          lineTo: "",
           alertCooldownMinutes: 30,
           createdAt: nowIso()
         }
@@ -224,6 +226,8 @@ function cleanHospitalForUser(hospital, user) {
   if (!canManageTenant(user, hospital.id)) {
     delete clean.alertWebhookUrl;
     delete clean.alertWebhookToken;
+    delete clean.lineChannelAccessToken;
+    delete clean.lineTo;
     delete clean.alertCooldownMinutes;
   }
   return clean;
@@ -270,12 +274,14 @@ function hospitalNotificationConfig(hospital) {
   return {
     url: hospital?.alertWebhookUrl || ALERT_WEBHOOK_URL,
     token: hospital?.alertWebhookToken || ALERT_WEBHOOK_TOKEN,
+    lineChannelAccessToken: hospital?.lineChannelAccessToken || "",
+    lineTo: hospital?.lineTo || "",
     cooldownMinutes: Number(hospital?.alertCooldownMinutes ?? ALERT_COOLDOWN_MINUTES)
   };
 }
 
 function shouldSendNotification(db, alert, config) {
-  if (!config.url) return false;
+  if (!config.url && !(config.lineChannelAccessToken && config.lineTo)) return false;
   if (!Number.isFinite(config.cooldownMinutes) || config.cooldownMinutes <= 0) return true;
   const cutoff = Date.now() - config.cooldownMinutes * 60 * 1000;
   return !db.alerts.some(item =>
@@ -288,7 +294,6 @@ function shouldSendNotification(db, alert, config) {
 }
 
 async function sendAlertNotification({ alert, reading, hospital, room, device, config = hospitalNotificationConfig(hospital) }) {
-  if (!config.url) return { skipped: true };
   const payload = {
     event: "sterile_room_alert",
     level: alert.level,
@@ -302,6 +307,12 @@ async function sendAlertNotification({ alert, reading, hospital, room, device, c
     timestamp: reading.timestamp,
     appUrl: APP_PUBLIC_URL
   };
+
+  if (config.lineChannelAccessToken && config.lineTo) {
+    return sendLineNotification(payload, config);
+  }
+
+  if (!config.url) return { skipped: true };
   const headers = { "content-type": "application/json" };
   if (config.token) headers.authorization = `Bearer ${config.token}`;
   const response = await fetch(config.url, {
@@ -313,6 +324,36 @@ async function sendAlertNotification({ alert, reading, hospital, room, device, c
     throw new Error(`Webhook failed: ${response.status}`);
   }
   return { ok: true };
+}
+
+async function sendLineNotification(payload, config) {
+  const text = [
+    `แจ้งเตือน ${payload.level.toUpperCase()}`,
+    payload.hospital ? `รพ.: ${payload.hospital}` : "",
+    payload.room ? `ห้อง: ${payload.room}` : "",
+    payload.device ? `อุปกรณ์: ${payload.device}` : "",
+    `Temp: ${payload.temperature} °C`,
+    `RH: ${payload.humidity} %`,
+    payload.message,
+    payload.appUrl ? `ดูระบบ: ${payload.appUrl}` : ""
+  ].filter(Boolean).join("\n");
+
+  const response = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${config.lineChannelAccessToken}`
+    },
+    body: JSON.stringify({
+      to: config.lineTo,
+      messages: [{ type: "text", text }]
+    })
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`LINE push failed: ${response.status} ${body}`.trim());
+  }
+  return { ok: true, channel: "line" };
 }
 
 async function handleAuth(req, res, url) {
@@ -443,6 +484,8 @@ async function handleApi(req, res, url) {
         code: String(payload.code || "").trim() || `HOSP-${db.hospitals.length + 1}`,
         alertWebhookUrl: "",
         alertWebhookToken: "",
+        lineChannelAccessToken: "",
+        lineTo: "",
         alertCooldownMinutes: 30,
         createdAt: nowIso()
       };
@@ -461,6 +504,8 @@ async function handleApi(req, res, url) {
       if (!hospital) return json(res, 404, { error: "Hospital not found" });
       hospital.alertWebhookUrl = String(payload.alertWebhookUrl || "").trim();
       hospital.alertWebhookToken = String(payload.alertWebhookToken || "").trim();
+      hospital.lineChannelAccessToken = String(payload.lineChannelAccessToken || "").trim();
+      hospital.lineTo = String(payload.lineTo || "").trim();
       const cooldown = Number(payload.alertCooldownMinutes);
       hospital.alertCooldownMinutes = Number.isFinite(cooldown) && cooldown >= 0 ? cooldown : 30;
       return json(res, 200, { hospital });

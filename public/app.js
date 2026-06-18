@@ -285,6 +285,8 @@ function renderSelectors() {
 function renderAlertSettings() {
   const hospital = selectedHospital();
   if (!hospital || !$("#alertSettingsForm")) return;
+  $("#alertSettingsForm").elements.lineChannelAccessToken.value = hospital.lineChannelAccessToken || "";
+  $("#alertSettingsForm").elements.lineTo.value = hospital.lineTo || "";
   $("#alertSettingsForm").elements.alertWebhookUrl.value = hospital.alertWebhookUrl || "";
   $("#alertSettingsForm").elements.alertWebhookToken.value = hospital.alertWebhookToken || "";
   $("#alertSettingsForm").elements.alertCooldownMinutes.value = hospital.alertCooldownMinutes ?? 30;
@@ -470,6 +472,8 @@ $("#alertSettingsForm").addEventListener("submit", async event => {
     method: "POST",
     body: JSON.stringify({
       hospitalId: selectedHospitalId(),
+      lineChannelAccessToken: form.get("lineChannelAccessToken"),
+      lineTo: form.get("lineTo"),
       alertWebhookUrl: form.get("alertWebhookUrl"),
       alertWebhookToken: form.get("alertWebhookToken"),
       alertCooldownMinutes: Number(form.get("alertCooldownMinutes"))

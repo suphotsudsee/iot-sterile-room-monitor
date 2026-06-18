@@ -100,9 +100,27 @@ ALERT_COOLDOWN_MINUTES=30
 1. Login ด้วย `system_admin` หรือ `hospital_admin`
 2. เลือกโรงพยาบาล
 3. ไปที่ `แจ้งเตือนของ รพ.`
-4. ใส่ `Webhook URL`, `Token` ถ้ามี, และ cooldown
-5. กด `บันทึกแจ้งเตือน`
-6. กด `ทดสอบแจ้งเตือน` เพื่อตรวจว่า webhook รับข้อความได้
+4. ถ้าต้องการส่ง LINE โดยตรง ให้ใส่ `LINE Channel Access Token` และ `LINE User ID หรือ Group ID`
+5. ถ้าต้องการส่งผ่านระบบอื่น ให้ใส่ `Webhook URL`, `Token` ถ้ามี
+6. ตั้ง cooldown แล้วกด `บันทึกแจ้งเตือน`
+7. กด `ทดสอบแจ้งเตือน` เพื่อตรวจว่าปลายทางรับข้อความได้
+
+ถ้าตั้ง LINE ครบ ระบบจะส่งผ่าน LINE ก่อน ถ้าไม่ได้ตั้ง LINE แต่มี Webhook URL ระบบจะส่ง webhook
+
+ค่าที่ต้องใช้สำหรับ LINE:
+
+```text
+LINE Channel Access Token = token จาก LINE Developers Console > Messaging API
+LINE User ID หรือ Group ID = ปลายทางที่ต้องการให้ bot ส่งข้อความไป
+```
+
+LINE Messaging API ใช้ endpoint:
+
+```text
+https://api.line.me/v2/bot/message/push
+```
+
+โดยระบบจะส่งข้อความแบบ text message ไปยังค่า `LINE User ID หรือ Group ID`
 
 ค่าใน Coolify ด้านล่างเป็น fallback กลาง ถ้าโรงพยาบาลนั้นยังไม่ได้ตั้ง webhook ของตัวเอง:
 
