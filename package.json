@@ -1,0 +1,12 @@
+{
+  "name": "iot-sterile-room-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Temperature and relative humidity monitoring dashboard for sterile storage room IoT data.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

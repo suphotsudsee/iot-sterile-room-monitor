@@ -1,0 +1,15 @@
+services:
+  sterile-room-monitor:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      DATA_DIR: /app/data
+      SEED_DEMO_DATA: "false"
+    volumes:
+      - sterile-room-monitor-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  sterile-room-monitor-data:

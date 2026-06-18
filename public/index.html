@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Temperature & Relative Humidity Monitoring</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="hero">
+        <div class="seal" aria-hidden="true">
+          <div class="seal-mark">+</div>
+        </div>
+        <div class="title-block">
+          <h1>แบบบันทึกการติดตามอุณหภูมิและความชื้นสัมพัทธ์</h1>
+          <p>(Temperature &amp; Relative Humidity Monitoring)</p>
+          <h2>ห้องเก็บเครื่องมือปราศจากเชื้อ (Sterile Storage Room)</h2>
+        </div>
+        <div class="month-card">
+          <label>เดือน</label>
+          <input id="monthPicker" type="month">
+          <label>พ.ศ.</label>
+          <input id="thaiYear" type="text" readonly>
+        </div>
+      </header>
+
+      <section class="standards panel">
+        <div class="standard-copy">
+          <div class="target" aria-hidden="true">◎</div>
+          <div>
+            <h3>เกณฑ์มาตรฐาน</h3>
+            <p>อุณหภูมิ <strong>20 - 24 °C</strong></p>
+            <p>ความชื้นสัมพัทธ์ (RH) <strong>30 - 60 %</strong></p>
+          </div>
+        </div>
+
+        <div class="risk-scale">
+          <h3>ระดับความเสี่ยง / สีสัญลักษณ์</h3>
+          <div class="risk-cards">
+            <article class="risk normal">
+              <span></span>
+              <b>ปกติ (เขียว)</b>
+              <p>Temp 20-24 °C<br>RH 30-60 %</p>
+            </article>
+            <article class="risk caution">
+              <span></span>
+              <b>เฝ้าระวัง (เหลือง)</b>
+              <p>Temp 24.1-26 °C<br>RH 61-65 %</p>
+            </article>
+            <article class="risk high">
+              <span></span>
+              <b>เสี่ยงสูง (ส้ม)</b>
+              <p>Temp 26.1-28 °C<br>RH 66-70 %</p>
+            </article>
+            <article class="risk critical">
+              <span></span>
+              <b>วิกฤต (แดง)</b>
+              <p>Temp &gt; 28 °C<br>RH &gt; 70 %</p>
+            </article>
+          </div>
+        </div>
+
+        <aside class="actions">
+          <h3>แนวทางเมื่อผิดปกติ</h3>
+          <ul>
+            <li>ตรวจสอบเครื่องลดความชื้น / แอร์</li>
+            <li>ตรวจสอบการเปิด-ปิดประตู</li>
+            <li>บันทึกเหตุการณ์และการแก้ไข</li>
+            <li>แยกห่อและ Reprocess เมื่อจำเป็น</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="toolbar panel">
+        <div>
+          <strong>สถานะอุปกรณ์</strong>
+          <span id="deviceStatus">กำลังโหลดข้อมูล...</span>
+        </div>
+        <form id="manualForm" class="manual-form">
+          <input name="temperature" type="number" step="0.1" placeholder="Temp °C" required>
+          <input name="humidity" type="number" step="0.1" placeholder="RH %" required>
+          <button type="submit">เพิ่มข้อมูลทดสอบ</button>
+        </form>
+      </section>
+
+      <section class="chart-panel panel">
+        <div class="chart-title">
+          <h3>อุณหภูมิ (°C)</h3>
+          <span>ข้อมูลเฉลี่ยรายวันจาก ESP</span>
+        </div>
+        <div id="tempGrid" class="monitor-grid"></div>
+      </section>
+
+      <section class="chart-panel panel">
+        <div class="chart-title">
+          <h3>ความชื้นสัมพัทธ์ (RH %)</h3>
+          <span>ข้อมูลเฉลี่ยรายวันจาก ESP</span>
+        </div>
+        <div id="humidityGrid" class="monitor-grid"></div>
+      </section>
+
+      <section class="bottom">
+        <div class="monthly panel">
+          <h3>สรุปผลประจำเดือน</h3>
+          <div id="summaryCards" class="summary-cards"></div>
+        </div>
+        <div class="ranges panel">
+          <h3>สรุปค่ารายเดือน</h3>
+          <div class="range-grid">
+            <span>อุณหภูมิสูงสุด</span><b id="maxTemp">-</b><em>°C</em>
+            <span>RH สูงสุด</span><b id="maxRh">-</b><em>%</em>
+            <span>อุณหภูมิต่ำสุด</span><b id="minTemp">-</b><em>°C</em>
+            <span>RH ต่ำสุด</span><b id="minRh">-</b><em>%</em>
+            <span>อุณหภูมิเฉลี่ย</span><b id="avgTemp">-</b><em>°C</em>
+            <span>RH เฉลี่ย</span><b id="avgRh">-</b><em>%</em>
+          </div>
+        </div>
+        <div class="signature panel">
+          <p>ผู้บันทึก <span></span></p>
+          <p>หัวหน้างาน <span></span></p>
+          <p>ผู้ตรวจสอบ <span></span></p>
+          <p>วันที่ <span></span></p>
+        </div>
+      </section>
+
+      <footer>
+        หมายเหตุ : ระบบรับข้อมูลจาก ESP ผ่าน <code>POST /api/readings</code> และคำนวณสรุปจากข้อมูลในเดือนที่เลือก
+      </footer>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
