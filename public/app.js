@@ -27,6 +27,16 @@ const rhRows = [
 
 const $ = selector => document.querySelector(selector);
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
 function pad(value) {
   return String(value).padStart(2, "0");
 }
@@ -280,7 +290,10 @@ function renderLatestReadings(readings) {
 }
 
 function renderSelectors() {
+  const currentHospitalId = $("#hospitalSelect").value || state.user?.hospitalId;
+  const currentRoomId = $("#roomSelect").value;
   $("#hospitalSelect").innerHTML = state.hospitals.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
+  if (state.hospitals.some(item => item.id === currentHospitalId)) $("#hospitalSelect").value = currentHospitalId;
   $("#hospitalSelect").disabled = state.user?.role !== "system_admin";
   $("#hospitalForm").classList.toggle("hidden", state.user?.role !== "system_admin");
   const canManage = canManageCurrentUser();
@@ -294,7 +307,9 @@ function renderSelectors() {
     : `<option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`;
   const rooms = state.rooms.filter(item => item.hospitalId === selectedHospitalId());
   $("#roomSelect").innerHTML = rooms.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
+  if (rooms.some(item => item.id === currentRoomId)) $("#roomSelect").value = currentRoomId;
   renderAlertSettings();
+  renderCrudLists();
   showPage(state.currentPage);
 }
 
@@ -339,6 +354,51 @@ function renderUsers() {
         <b>${user.name}</b>
         <span>${roleLabel(user.role)}</span>
         <code>${user.email}</code>
+      </div>`).join("")
+    : "<p>ยังไม่มีผู้ใช้ของโรงพยาบาลนี้</p>";
+}
+
+function actionButtons(type, id, canDelete = true) {
+  return `<div class="row-actions">
+    <button class="secondary-button" type="button" data-crud-action="edit" data-crud-type="${type}" data-id="${id}">แก้ไข</button>
+    ${canDelete ? `<button class="danger-button" type="button" data-crud-action="delete" data-crud-type="${type}" data-id="${id}">ลบ</button>` : ""}
+  </div>`;
+}
+
+function renderCrudLists() {
+  if (!$("#hospitalCrudList")) return;
+  const hospitalId = selectedHospitalId();
+  const rooms = state.rooms.filter(item => item.hospitalId === hospitalId);
+  const devices = state.devices.filter(item => item.hospitalId === hospitalId);
+  const users = state.users.filter(item => item.hospitalId === hospitalId);
+  const roomName = id => state.rooms.find(room => room.id === id)?.name || "-";
+
+  $("#hospitalCrud").classList.toggle("hidden", state.user?.role !== "system_admin");
+  $("#hospitalCrudList").innerHTML = state.hospitals.length
+    ? state.hospitals.map(hospital => `<div class="crud-row">
+        <div><b>${escapeHtml(hospital.name)}</b><span>${escapeHtml(hospital.code || "-")}</span></div>
+        ${actionButtons("hospital", hospital.id)}
+      </div>`).join("")
+    : "<p>ยังไม่มีโรงพยาบาล</p>";
+
+  $("#roomCrudList").innerHTML = rooms.length
+    ? rooms.map(room => `<div class="crud-row">
+        <div><b>${escapeHtml(room.name)}</b><span>Temp ${room.tempMin}-${room.tempMax} °C / RH ${room.rhMin}-${room.rhMax} %</span></div>
+        ${actionButtons("room", room.id)}
+      </div>`).join("")
+    : "<p>ยังไม่มีห้องในโรงพยาบาลนี้</p>";
+
+  $("#deviceCrudList").innerHTML = devices.length
+    ? devices.map(device => `<div class="crud-row">
+        <div><b>${escapeHtml(device.name)}</b><span>${escapeHtml(roomName(device.roomId))} / ${escapeHtml(device.deviceId || "-")}</span></div>
+        ${actionButtons("device", device.id)}
+      </div>`).join("")
+    : "<p>ยังไม่มี ESP ในโรงพยาบาลนี้</p>";
+
+  $("#userCrudList").innerHTML = users.length
+    ? users.map(user => `<div class="crud-row">
+        <div><b>${escapeHtml(user.name)}</b><span>${escapeHtml(user.email)} / ${escapeHtml(roleLabel(user.role))}</span></div>
+        ${actionButtons("user", user.id)}
       </div>`).join("")
     : "<p>ยังไม่มีผู้ใช้ของโรงพยาบาลนี้</p>";
 }
@@ -483,6 +543,106 @@ $("#deviceList").addEventListener("click", async event => {
     body: "{}"
   });
   await refreshAll();
+});
+
+async function editHospital(id) {
+  const hospital = state.hospitals.find(item => item.id === id);
+  if (!hospital) return;
+  const name = prompt("ชื่อโรงพยาบาล", hospital.name);
+  if (name === null) return;
+  const code = prompt("รหัสโรงพยาบาล", hospital.code || "");
+  if (code === null) return;
+  await api(`/api/hospitals/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ name, code })
+  });
+}
+
+async function editRoom(id) {
+  const room = state.rooms.find(item => item.id === id);
+  if (!room) return;
+  const name = prompt("ชื่อห้อง", room.name);
+  if (name === null) return;
+  const tempMin = prompt("Temp ต่ำสุด °C", room.tempMin);
+  if (tempMin === null) return;
+  const tempMax = prompt("Temp สูงสุด °C", room.tempMax);
+  if (tempMax === null) return;
+  const rhMin = prompt("RH ต่ำสุด %", room.rhMin);
+  if (rhMin === null) return;
+  const rhMax = prompt("RH สูงสุด %", room.rhMax);
+  if (rhMax === null) return;
+  await api(`/api/rooms/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ name, tempMin: Number(tempMin), tempMax: Number(tempMax), rhMin: Number(rhMin), rhMax: Number(rhMax) })
+  });
+}
+
+async function editDevice(id) {
+  const device = state.devices.find(item => item.id === id);
+  if (!device) return;
+  const name = prompt("ชื่อ ESP", device.name);
+  if (name === null) return;
+  const deviceId = prompt("Device ID", device.deviceId || device.name);
+  if (deviceId === null) return;
+  const rooms = state.rooms.filter(item => item.hospitalId === device.hospitalId);
+  const currentRoom = rooms.find(item => item.id === device.roomId);
+  const roomText = prompt("ชื่อห้องของ ESP", currentRoom?.name || "");
+  if (roomText === null) return;
+  const nextRoom = rooms.find(item => item.name === roomText.trim()) || currentRoom;
+  await api(`/api/devices/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ name, deviceId, roomId: nextRoom?.id || device.roomId })
+  });
+}
+
+async function editUser(id) {
+  const target = state.users.find(item => item.id === id);
+  if (!target) return;
+  const name = prompt("ชื่อผู้ใช้", target.name);
+  if (name === null) return;
+  const email = prompt("email", target.email);
+  if (email === null) return;
+  const role = prompt("สิทธิ์: hospital_admin, staff, auditor", target.role);
+  if (role === null) return;
+  const password = prompt("รหัสผ่านใหม่ ถ้าไม่เปลี่ยนให้เว้นว่าง", "");
+  if (password === null) return;
+  await api(`/api/users/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ name, email, role, password })
+  });
+}
+
+async function deleteCrudItem(type, id) {
+  const labels = { hospital: "โรงพยาบาล", room: "ห้อง", device: "ESP", user: "ผู้ใช้" };
+  if (!confirm(`ลบ${labels[type] || "รายการนี้"}ออกจากระบบ?`)) return;
+  await api(`/api/${type === "hospital" ? "hospitals" : `${type}s`}/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    body: "{}"
+  });
+}
+
+$("#managementPage").addEventListener("click", async event => {
+  const button = event.target.closest("[data-crud-action]");
+  if (!button) return;
+  const { crudAction, crudType, id } = button.dataset;
+  button.disabled = true;
+  try {
+    if (crudAction === "delete") {
+      await deleteCrudItem(crudType, id);
+    } else if (crudType === "hospital") {
+      await editHospital(id);
+    } else if (crudType === "room") {
+      await editRoom(id);
+    } else if (crudType === "device") {
+      await editDevice(id);
+    } else if (crudType === "user") {
+      await editUser(id);
+    }
+    await refreshAll();
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
+  }
 });
 
 $("#userForm").addEventListener("submit", async event => {

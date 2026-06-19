@@ -266,6 +266,56 @@ button {
   padding: 0 14px;
 }
 
+.crud-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.crud-panel {
+  border: 1px solid #bfd0f3;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.crud-panel h3 {
+  margin-bottom: 8px;
+}
+
+.crud-row {
+  display: grid;
+  grid-template-columns: 1fr 150px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #d4e0f5;
+}
+
+.crud-row div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.crud-row span {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.row-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.row-actions button {
+  min-height: 34px;
+  padding: 0 8px;
+}
+
 .secondary-button {
   background: #526174 !important;
 }
@@ -692,7 +742,12 @@ code {
   }
 
   .management-grid,
+  .crud-grid,
   .saas-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .crud-row {
     grid-template-columns: 1fr;
   }
 }

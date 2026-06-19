@@ -495,6 +495,37 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (url.pathname.startsWith("/api/hospitals/") && req.method === "PUT") {
+    if (user.role !== "system_admin") return json(res, 403, { error: "System admin only" });
+    const hospitalId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    const payload = await readJson(req);
+    return withDb(db => {
+      const hospital = db.hospitals.find(item => item.id === hospitalId);
+      if (!hospital) return json(res, 404, { error: "Hospital not found" });
+      const name = String(payload.name || "").trim();
+      if (!name) return json(res, 400, { error: "Hospital name is required" });
+      hospital.name = name;
+      hospital.code = String(payload.code || "").trim() || hospital.code;
+      return json(res, 200, { hospital });
+    });
+  }
+
+  if (url.pathname.startsWith("/api/hospitals/") && req.method === "DELETE") {
+    if (user.role !== "system_admin") return json(res, 403, { error: "System admin only" });
+    const hospitalId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    return withDb(db => {
+      const hospital = db.hospitals.find(item => item.id === hospitalId);
+      if (!hospital) return json(res, 404, { error: "Hospital not found" });
+      db.hospitals = db.hospitals.filter(item => item.id !== hospitalId);
+      db.rooms = db.rooms.filter(item => item.hospitalId !== hospitalId);
+      db.devices = db.devices.filter(item => item.hospitalId !== hospitalId);
+      db.readings = db.readings.filter(item => item.hospitalId !== hospitalId);
+      db.alerts = db.alerts.filter(item => item.hospitalId !== hospitalId);
+      db.users = db.users.filter(item => item.hospitalId !== hospitalId);
+      return json(res, 200, { ok: true });
+    });
+  }
+
   if (url.pathname === "/api/hospitals/alert-settings" && req.method === "POST") {
     const payload = await readJson(req);
     const hospitalId = String(payload.hospitalId || "");
@@ -532,6 +563,43 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (url.pathname.startsWith("/api/rooms/") && req.method === "PUT") {
+    const roomId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    const payload = await readJson(req);
+    return withDb(db => {
+      const room = db.rooms.find(item => item.id === roomId);
+      if (!room) return json(res, 404, { error: "Room not found" });
+      if (!canManageTenant(user, room.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      const name = String(payload.name || "").trim();
+      if (!name) return json(res, 400, { error: "Room name is required" });
+      room.name = name;
+      const tempMin = Number(payload.tempMin);
+      const tempMax = Number(payload.tempMax);
+      const rhMin = Number(payload.rhMin);
+      const rhMax = Number(payload.rhMax);
+      if (![tempMin, tempMax, rhMin, rhMax].every(Number.isFinite)) return json(res, 400, { error: "Room limits must be numbers" });
+      room.tempMin = tempMin;
+      room.tempMax = tempMax;
+      room.rhMin = rhMin;
+      room.rhMax = rhMax;
+      return json(res, 200, { room });
+    });
+  }
+
+  if (url.pathname.startsWith("/api/rooms/") && req.method === "DELETE") {
+    const roomId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    return withDb(db => {
+      const room = db.rooms.find(item => item.id === roomId);
+      if (!room) return json(res, 404, { error: "Room not found" });
+      if (!canManageTenant(user, room.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      db.rooms = db.rooms.filter(item => item.id !== roomId);
+      db.devices = db.devices.filter(item => item.roomId !== roomId);
+      db.readings = db.readings.filter(item => item.roomId !== roomId);
+      db.alerts = db.alerts.filter(item => item.roomId !== roomId);
+      return json(res, 200, { ok: true });
+    });
+  }
+
   if (url.pathname === "/api/devices" && req.method === "POST") {
     const payload = await readJson(req);
     if (!canManageTenant(user, payload.hospitalId)) return json(res, 403, { error: "Forbidden" });
@@ -551,6 +619,24 @@ async function handleApi(req, res, url) {
       if (!device.name) return json(res, 400, { error: "Device name is required" });
       db.devices.push(device);
       return json(res, 201, { device });
+    });
+  }
+
+  if (url.pathname.startsWith("/api/devices/") && req.method === "PUT") {
+    const deviceId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    const payload = await readJson(req);
+    return withDb(db => {
+      const device = db.devices.find(item => item.id === deviceId);
+      if (!device) return json(res, 404, { error: "Device not found" });
+      if (!canManageTenant(user, device.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      const room = db.rooms.find(item => item.id === String(payload.roomId || device.roomId) && item.hospitalId === device.hospitalId);
+      if (!room) return json(res, 400, { error: "Room not found" });
+      const name = String(payload.name || "").trim();
+      if (!name) return json(res, 400, { error: "Device name is required" });
+      device.name = name;
+      device.deviceId = String(payload.deviceId || name).trim();
+      device.roomId = room.id;
+      return json(res, 200, { device });
     });
   }
 
@@ -591,6 +677,38 @@ async function handleApi(req, res, url) {
       };
       db.users.push(newUser);
       return json(res, 201, { user: cleanUser(newUser) });
+    });
+  }
+
+  if (url.pathname.startsWith("/api/users/") && req.method === "PUT") {
+    const targetUserId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    const payload = await readJson(req);
+    return withDb(db => {
+      const target = db.users.find(item => item.id === targetUserId && item.role !== "system_admin");
+      if (!target) return json(res, 404, { error: "User not found" });
+      if (!canManageTenant(user, target.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      const allowedRoles = user.role === "system_admin" ? ["hospital_admin", "staff", "auditor"] : ["staff", "auditor"];
+      const role = String(payload.role || target.role);
+      if (!allowedRoles.includes(role)) return json(res, 400, { error: "Role is not allowed" });
+      const email = String(payload.email || "").trim().toLowerCase();
+      if (!email) return json(res, 400, { error: "Email is required" });
+      if (db.users.some(item => item.id !== targetUserId && item.email.toLowerCase() === email)) return json(res, 409, { error: "Email already exists" });
+      target.name = String(payload.name || "").trim() || email;
+      target.email = email;
+      target.role = role;
+      if (String(payload.password || "").trim()) target.passwordHash = hashPassword(String(payload.password));
+      return json(res, 200, { user: cleanUser(target) });
+    });
+  }
+
+  if (url.pathname.startsWith("/api/users/") && req.method === "DELETE") {
+    const targetUserId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    return withDb(db => {
+      const target = db.users.find(item => item.id === targetUserId && item.role !== "system_admin");
+      if (!target) return json(res, 404, { error: "User not found" });
+      if (!canManageTenant(user, target.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      db.users = db.users.filter(item => item.id !== targetUserId);
+      return json(res, 200, { ok: true });
     });
   }
 
