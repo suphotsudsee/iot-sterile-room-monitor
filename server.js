@@ -554,6 +554,17 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (url.pathname.startsWith("/api/devices/") && req.method === "DELETE") {
+    const deviceId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    return withDb(db => {
+      const device = db.devices.find(item => item.id === deviceId);
+      if (!device) return json(res, 404, { error: "Device not found" });
+      if (!canManageTenant(user, device.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      db.devices = db.devices.filter(item => item.id !== deviceId);
+      return json(res, 200, { ok: true });
+    });
+  }
+
   if (url.pathname === "/api/users" && req.method === "POST") {
     const payload = await readJson(req);
     const hospitalId = String(payload.hospitalId || "");

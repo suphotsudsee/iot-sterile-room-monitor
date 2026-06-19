@@ -296,7 +296,7 @@ button {
 
 .device-row {
   display: grid;
-  grid-template-columns: 220px 210px 1fr;
+  grid-template-columns: 220px 210px 1fr 82px;
   gap: 12px;
   align-items: center;
   padding: 8px 0;
@@ -309,6 +309,17 @@ button {
 
 .device-row code {
   overflow-wrap: anywhere;
+}
+
+.danger-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: #c62828;
+}
+
+.danger-button:hover {
+  background: #a91f1f;
 }
 
 .alert-list {
