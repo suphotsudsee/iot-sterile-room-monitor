@@ -483,15 +483,17 @@ $("#monthPicker").addEventListener("change", loadDashboard);
 
 $("#hospitalForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   await api("/api/hospitals", { method: "POST", body: JSON.stringify({ name: form.get("name"), code: form.get("code") }) });
-  event.currentTarget.reset();
+  formElement.reset();
   await refreshAll();
 });
 
 $("#roomForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   await api("/api/rooms", {
     method: "POST",
     body: JSON.stringify({
@@ -503,16 +505,17 @@ $("#roomForm").addEventListener("submit", async event => {
       rhMax: Number(form.get("rhMax"))
     })
   });
-  event.currentTarget.reset();
+  formElement.reset();
   await refreshAll();
 });
 
 $("#deviceForm").addEventListener("submit", async event => {
   event.preventDefault();
+  const formElement = event.currentTarget;
   const message = $("#deviceFormMessage");
-  const button = event.currentTarget.querySelector("button[type='submit']");
+  const button = formElement.querySelector("button[type='submit']");
   message.textContent = "";
-  const form = new FormData(event.currentTarget);
+  const form = new FormData(formElement);
   const roomId = String(form.get("roomId") || selectedRoomId() || "");
   if (!roomId) {
     message.textContent = "กรุณาเพิ่มห้องก่อนสร้าง Device Key";
@@ -530,7 +533,7 @@ $("#deviceForm").addEventListener("submit", async event => {
         deviceId: form.get("deviceId")
       })
     });
-    event.currentTarget.reset();
+    formElement.reset();
     await refreshAll();
     $("#deviceRoomSelect").value = roomId;
     message.textContent = `สร้าง Device Key แล้ว: ${result.device.deviceKey}`;
@@ -659,7 +662,8 @@ $("#managementPage").addEventListener("click", async event => {
 
 $("#userForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   await api("/api/users", {
     method: "POST",
     body: JSON.stringify({
@@ -670,13 +674,14 @@ $("#userForm").addEventListener("submit", async event => {
       role: form.get("role")
     })
   });
-  event.currentTarget.reset();
+  formElement.reset();
   await refreshAll();
 });
 
 $("#alertSettingsForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   await api("/api/hospitals/alert-settings", {
     method: "POST",
     body: JSON.stringify({
@@ -701,7 +706,8 @@ $("#testAlertButton").addEventListener("click", async () => {
 
 $("#manualForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   const device = state.devices.find(item => item.roomId === selectedRoomId());
   if (!device) {
     alert("กรุณาเพิ่มอุปกรณ์ก่อน");
@@ -715,7 +721,7 @@ $("#manualForm").addEventListener("submit", async event => {
       humidity: Number(form.get("humidity"))
     })
   });
-  event.currentTarget.reset();
+  formElement.reset();
   await refreshAll();
 });
 
