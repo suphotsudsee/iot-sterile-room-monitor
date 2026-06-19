@@ -416,12 +416,12 @@ function renderCrudLists() {
 }
 
 function renderAlerts() {
-  const alerts = state.alerts.filter(item => item.roomId === selectedRoomId()).slice(0, 5);
-  $("#alertList").innerHTML = alerts.length
-    ? alerts.map(item => `<div class="alert ${item.level}">
-        <b>${item.level}</b>
-        <span>${item.message}</span>
-      </div>`).join("")
+  const alert = state.alerts.find(item => item.roomId === selectedRoomId());
+  $("#alertList").innerHTML = alert
+    ? `<div class="alert ${alert.level}">
+        <b>${alert.level}</b>
+        <span>${alert.message}</span>
+      </div>`
     : "<p>ไม่มีแจ้งเตือนค้างอยู่</p>";
 }
 
