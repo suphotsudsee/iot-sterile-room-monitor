@@ -79,6 +79,12 @@ function selectedHospital() {
   return state.hospitals.find(hospital => hospital.id === selectedHospitalId());
 }
 
+function currentDeviceName(reading) {
+  return state.devices.find(device => device.id === reading?.deviceId)?.name
+    || reading?.deviceName
+    || "อุปกรณ์";
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -433,9 +439,12 @@ async function loadDashboard() {
   renderLatestReadings(state.readings);
 
   const latest = [...state.readings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+  const roomDevices = state.devices.filter(device => device.roomId === selectedRoomId());
   $("#deviceStatus").textContent = latest
-    ? `${latest.deviceName} ส่งข้อมูลล่าสุด ${new Date(latest.timestamp).toLocaleString("th-TH")}`
-    : "ยังไม่มีข้อมูลในเดือนนี้";
+    ? `${currentDeviceName(latest)} ส่งข้อมูลล่าสุด ${new Date(latest.timestamp).toLocaleString("th-TH")}`
+    : roomDevices.length
+      ? `ยังไม่มีข้อมูลในเดือนนี้ (${roomDevices.map(device => device.name).join(", ")})`
+      : "ยังไม่มีอุปกรณ์ในห้องนี้";
 
   $("#reportLink").href = `/api/reports/monthly.csv?${query}`;
   $("#serverUrlText").textContent = `${location.origin}/api/readings`;
