@@ -329,15 +329,11 @@ function renderAlertSettings() {
 
 function renderDevices() {
   const devices = state.devices.filter(item => item.roomId === selectedRoomId());
-  const deleteButton = device => canManageCurrentUser()
-    ? `<button class="danger-button device-delete-button" type="button" data-device-id="${device.id}">ลบ</button>`
-    : "";
   $("#deviceList").innerHTML = devices.length
     ? devices.map(device => `<div class="device-row">
         <b>${device.name}</b>
         <span>${device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString("th-TH") : "ยังไม่มีข้อมูล"}</span>
         <code>${device.deviceKey}</code>
-        ${deleteButton(device)}
       </div>`).join("")
     : "<p>ยังไม่มีอุปกรณ์ในห้องนี้</p>";
 }
@@ -544,20 +540,6 @@ $("#deviceForm").addEventListener("submit", async event => {
   } finally {
     button.disabled = false;
   }
-});
-
-$("#deviceList").addEventListener("click", async event => {
-  const button = event.target.closest(".device-delete-button");
-  if (!button) return;
-  const device = state.devices.find(item => item.id === button.dataset.deviceId);
-  const deviceName = device?.name || "อุปกรณ์นี้";
-  if (!confirm(`ลบ ${deviceName} ออกจากระบบ?`)) return;
-  button.disabled = true;
-  await api(`/api/devices/${encodeURIComponent(button.dataset.deviceId)}`, {
-    method: "DELETE",
-    body: "{}"
-  });
-  await refreshAll();
 });
 
 async function editHospital(id) {
