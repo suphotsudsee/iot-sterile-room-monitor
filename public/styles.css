@@ -276,6 +276,50 @@ button {
   color: #b42318;
 }
 
+.copy-field {
+  display: grid;
+  gap: 5px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.line-events {
+  display: grid;
+  gap: 6px;
+  max-height: 150px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.line-events p {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.line-event-button {
+  display: grid !important;
+  grid-template-columns: 48px 1fr;
+  gap: 3px 8px;
+  width: 100%;
+  min-height: 42px !important;
+  padding: 6px 8px !important;
+  background: #eef5ff !important;
+  color: var(--text) !important;
+  border: 1px solid #bfd0f3 !important;
+  text-align: left;
+}
+
+.line-event-button code,
+.line-event-button small {
+  overflow-wrap: anywhere;
+}
+
+.line-event-button small {
+  grid-column: 2;
+  color: var(--muted);
+}
+
 .crud-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

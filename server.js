@@ -55,7 +55,7 @@ function json(res, status, body, extraHeaders = {}) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "content-type",
     ...extraHeaders
   });
@@ -115,7 +115,9 @@ async function loadDb() {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     const raw = await fs.readFile(DB_FILE, "utf8");
-    return JSON.parse(raw);
+    const db = JSON.parse(raw);
+    db.lineWebhookEvents = Array.isArray(db.lineWebhookEvents) ? db.lineWebhookEvents : [];
+    return db;
   } catch {
     const hospitalId = id("hosp");
     const roomId = id("room");
@@ -160,6 +162,7 @@ async function loadDb() {
       ],
       readings: [],
       alerts: [],
+      lineWebhookEvents: [],
       users: [
         {
           id: id("usr"),
@@ -231,6 +234,19 @@ function cleanHospitalForUser(hospital, user) {
     delete clean.alertCooldownMinutes;
   }
   return clean;
+}
+
+function cleanLineWebhookEvent(event) {
+  return {
+    id: event.id,
+    hospitalId: event.hospitalId || "",
+    sourceType: event.sourceType,
+    lineId: event.lineId,
+    userId: event.userId || "",
+    groupId: event.groupId || "",
+    roomId: event.roomId || "",
+    receivedAt: event.receivedAt
+  };
 }
 
 async function requireUser(req, res) {
@@ -395,6 +411,36 @@ async function handleApi(req, res, url) {
   const authResult = await handleAuth(req, res, url);
   if (authResult !== false) return authResult;
 
+  if (url.pathname === "/api/line/webhook" && req.method === "POST") {
+    const payload = await readJson(req);
+    const hospitalId = String(url.searchParams.get("hospitalId") || "");
+    const events = Array.isArray(payload.events) ? payload.events : [];
+    const rows = events
+      .map(event => {
+        const source = event.source || {};
+        const lineId = source.groupId || source.roomId || source.userId || "";
+        if (!lineId) return null;
+        return {
+          id: id("line"),
+          hospitalId,
+          sourceType: source.type || "",
+          lineId,
+          userId: source.userId || "",
+          groupId: source.groupId || "",
+          roomId: source.roomId || "",
+          receivedAt: nowIso()
+        };
+      })
+      .filter(Boolean);
+    if (rows.length) {
+      await withDb(db => {
+        db.lineWebhookEvents = [...(db.lineWebhookEvents || []), ...rows].slice(-100);
+        return { ok: true };
+      });
+    }
+    return json(res, 200, { ok: true, saved: rows.length });
+  }
+
   if (url.pathname === "/api/readings" && req.method === "POST") {
     const payload = await readJson(req);
     const temperature = Number(payload.temperature ?? payload.temp);
@@ -470,7 +516,10 @@ async function handleApi(req, res, url) {
       rooms: db.rooms.filter(item => hospitalIds.includes(item.hospitalId)),
       devices: db.devices.filter(item => hospitalIds.includes(item.hospitalId)).map(item => ({ ...item, deviceKey: item.deviceKey })),
       alerts: db.alerts.filter(item => hospitalIds.includes(item.hospitalId) && !item.acknowledgedAt).slice(-50).reverse(),
-      users: db.users.filter(item => item.role !== "system_admin" && hospitalIds.includes(item.hospitalId)).map(cleanUser)
+      users: db.users.filter(item => item.role !== "system_admin" && hospitalIds.includes(item.hospitalId)).map(cleanUser),
+      lineWebhookEvents: canManageTenant(user, hospitalIds[0])
+        ? (db.lineWebhookEvents || []).filter(item => !item.hospitalId || hospitalIds.includes(item.hospitalId)).slice(-20).reverse().map(cleanLineWebhookEvent)
+        : []
     });
   }
 

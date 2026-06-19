@@ -101,8 +101,13 @@
             </form>
             <form id="alertSettingsForm">
               <h3>แจ้งเตือนของ รพ.</h3>
+              <label class="copy-field">
+                LINE Webhook URL
+                <input id="lineWebhookUrl" type="text" readonly>
+              </label>
               <input name="lineChannelAccessToken" placeholder="LINE Channel Access Token">
               <input name="lineTo" placeholder="LINE User ID หรือ Group ID">
+              <div id="lineWebhookEvents" class="line-events"></div>
               <input name="alertWebhookUrl" placeholder="Webhook URL ของ รพ. นี้">
               <input name="alertWebhookToken" placeholder="Token ถ้ามี">
               <input name="alertCooldownMinutes" type="number" min="0" step="1" value="30" placeholder="แจ้งซ้ำทุกกี่นาที">

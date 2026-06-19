@@ -6,6 +6,7 @@ const state = {
   alerts: [],
   users: [],
   readings: [],
+  lineWebhookEvents: [],
   currentPage: "dashboard"
 };
 
@@ -326,11 +327,27 @@ function renderSelectors() {
 function renderAlertSettings() {
   const hospital = selectedHospital();
   if (!hospital || !$("#alertSettingsForm")) return;
+  $("#lineWebhookUrl").value = `${location.origin}/api/line/webhook?hospitalId=${encodeURIComponent(hospital.id)}`;
   $("#alertSettingsForm").elements.lineChannelAccessToken.value = hospital.lineChannelAccessToken || "";
   $("#alertSettingsForm").elements.lineTo.value = hospital.lineTo || "";
   $("#alertSettingsForm").elements.alertWebhookUrl.value = hospital.alertWebhookUrl || "";
   $("#alertSettingsForm").elements.alertWebhookToken.value = hospital.alertWebhookToken || "";
   $("#alertSettingsForm").elements.alertCooldownMinutes.value = hospital.alertCooldownMinutes ?? 30;
+  renderLineWebhookEvents();
+}
+
+function renderLineWebhookEvents() {
+  const list = $("#lineWebhookEvents");
+  if (!list) return;
+  list.innerHTML = state.lineWebhookEvents.length
+    ? `<b>LINE ID ล่าสุดที่ทักบอท</b>` + state.lineWebhookEvents.map(event => `
+        <button type="button" class="line-event-button" data-line-id="${escapeHtml(event.lineId)}">
+          <span>${escapeHtml(event.sourceType || "line")}</span>
+          <code>${escapeHtml(event.lineId)}</code>
+          <small>${new Date(event.receivedAt).toLocaleString("th-TH")}</small>
+        </button>
+      `).join("")
+    : `<p>ยังไม่มี LINE ID ให้เพิ่มบอทเป็นเพื่อนหรือเชิญเข้ากลุ่ม แล้วส่งข้อความหา Bot 1 ครั้ง</p>`;
 }
 
 function renderDevices() {
@@ -685,6 +702,12 @@ $("#alertSettingsForm").addEventListener("submit", async event => {
     })
   });
   await refreshAll();
+});
+
+$("#lineWebhookEvents").addEventListener("click", event => {
+  const button = event.target.closest(".line-event-button");
+  if (!button) return;
+  $("#alertSettingsForm").elements.lineTo.value = button.dataset.lineId;
 });
 
 $("#testAlertButton").addEventListener("click", async () => {
