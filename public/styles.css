@@ -196,15 +196,40 @@ button {
 
 .saas-toolbar {
   display: grid;
-  grid-template-columns: 1fr 280px 280px 120px;
+  grid-template-columns: 1fr 220px 260px 260px 120px;
   gap: 12px;
   align-items: end;
   margin-top: 12px;
   padding: 12px 14px;
 }
 
-.management {
+.page-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.page-tabs button {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid #9fb9ee;
+  border-radius: 8px;
+  background: #eef5ff;
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.page-tabs button.active {
+  background: var(--blue);
+  color: white;
+}
+
+.page-view {
   margin-top: 12px;
+}
+
+.management {
   padding: 10px 14px;
 }
 

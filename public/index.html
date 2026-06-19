@@ -43,6 +43,10 @@
           <strong id="userLabel">-</strong>
           <button id="logoutButton" type="button">Logout</button>
         </div>
+        <div class="page-tabs" aria-label="Page navigation">
+          <button id="dashboardTab" class="active" type="button">หน้าหลัก</button>
+          <button id="managementTab" type="button">จัดการระบบ</button>
+        </div>
         <label>
           โรงพยาบาล
           <select id="hospitalSelect"></select>
@@ -54,7 +58,7 @@
         <a id="reportLink" class="button-link" href="#">Export CSV</a>
       </section>
 
-      <section class="management panel">
+      <section id="managementPage" class="management panel page-view hidden">
         <details open>
           <summary>จัดการโรงพยาบาล / ห้อง / อุปกรณ์ / ผู้ใช้</summary>
           <div class="management-grid">
@@ -107,6 +111,7 @@
         </details>
       </section>
 
+      <div id="dashboardPage" class="page-view">
       <section class="standards panel">
         <div class="standard-copy">
           <div class="target" aria-hidden="true">◎</div>
@@ -194,6 +199,7 @@
       <footer>
         ESP ส่งข้อมูลมาที่ <code id="serverUrlText"></code> พร้อม <code>deviceKey</code> ของอุปกรณ์
       </footer>
+      </div>
     </main>
 
     <script src="/app.js"></script>

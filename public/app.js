@@ -5,7 +5,8 @@ const state = {
   devices: [],
   alerts: [],
   users: [],
-  readings: []
+  readings: [],
+  currentPage: "dashboard"
 };
 
 const tempRows = [
@@ -83,6 +84,19 @@ async function api(path, options = {}) {
 function showApp(show) {
   $("#loginView").classList.toggle("hidden", show);
   $("#appView").classList.toggle("hidden", !show);
+}
+
+function canManageCurrentUser() {
+  return ["system_admin", "hospital_admin"].includes(state.user?.role);
+}
+
+function showPage(page) {
+  const requestedPage = page === "management" && canManageCurrentUser() ? "management" : "dashboard";
+  state.currentPage = requestedPage;
+  $("#dashboardPage").classList.toggle("hidden", requestedPage !== "dashboard");
+  $("#managementPage").classList.toggle("hidden", requestedPage !== "management");
+  $("#dashboardTab").classList.toggle("active", requestedPage === "dashboard");
+  $("#managementTab").classList.toggle("active", requestedPage === "management");
 }
 
 function tempLevel(value) {
@@ -269,17 +283,19 @@ function renderSelectors() {
   $("#hospitalSelect").innerHTML = state.hospitals.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
   $("#hospitalSelect").disabled = state.user?.role !== "system_admin";
   $("#hospitalForm").classList.toggle("hidden", state.user?.role !== "system_admin");
-  const canManage = ["system_admin", "hospital_admin"].includes(state.user?.role);
+  const canManage = canManageCurrentUser();
   $("#roomForm").classList.toggle("hidden", !canManage);
   $("#deviceForm").classList.toggle("hidden", !canManage);
   $("#userForm").classList.toggle("hidden", !canManage);
   $("#alertSettingsForm").classList.toggle("hidden", !canManage);
+  $("#managementTab").classList.toggle("hidden", !canManage);
   $("#userRoleSelect").innerHTML = state.user?.role === "system_admin"
     ? `<option value="hospital_admin">ผู้ดูแล รพ.</option><option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`
     : `<option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`;
   const rooms = state.rooms.filter(item => item.hospitalId === selectedHospitalId());
   $("#roomSelect").innerHTML = rooms.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
   renderAlertSettings();
+  showPage(state.currentPage);
 }
 
 function renderAlertSettings() {
@@ -398,6 +414,9 @@ $("#logoutButton").addEventListener("click", async () => {
   await api("/api/logout", { method: "POST", body: "{}" });
   showApp(false);
 });
+
+$("#dashboardTab").addEventListener("click", () => showPage("dashboard"));
+$("#managementTab").addEventListener("click", () => showPage("management"));
 
 $("#hospitalSelect").addEventListener("change", () => {
   renderSelectors();
