@@ -277,6 +277,29 @@ function alertLevel(reading, room) {
   return "normal";
 }
 
+function tempLevel(reading, room) {
+  if (reading.temperature > 28 || reading.temperature < room.tempMin) return "critical";
+  if (reading.temperature > 26) return "high";
+  if (reading.temperature > room.tempMax) return "caution";
+  return "normal";
+}
+
+function rhLevel(reading, room) {
+  if (reading.humidity > 70 || reading.humidity < room.rhMin) return "critical";
+  if (reading.humidity > 65) return "high";
+  if (reading.humidity > room.rhMax) return "caution";
+  return "normal";
+}
+
+function levelStyle(level) {
+  return {
+    normal: { label: "ปกติ", color: "#03a624", textColor: "#ffffff" },
+    caution: { label: "เฝ้าระวัง", color: "#ffe900", textColor: "#111827" },
+    high: { label: "เสี่ยงสูง", color: "#ff7600", textColor: "#111827" },
+    critical: { label: "วิกฤต", color: "#f40c0c", textColor: "#ffffff" }
+  }[level] || { label: level, color: "#526174", textColor: "#ffffff" };
+}
+
 function makeAlertMessage(reading, room, device) {
   const parts = [];
   if (reading.temperature < room.tempMin) parts.push(`Temp ต่ำ ${reading.temperature}°C`);
@@ -320,6 +343,8 @@ async function sendAlertNotification({ alert, reading, hospital, room, device, c
     deviceId: device?.deviceId || "",
     temperature: reading.temperature,
     humidity: reading.humidity,
+    tempLevel: room ? tempLevel(reading, room) : "normal",
+    rhLevel: room ? rhLevel(reading, room) : "normal",
     timestamp: reading.timestamp,
     appUrl: APP_PUBLIC_URL
   };
@@ -343,8 +368,11 @@ async function sendAlertNotification({ alert, reading, hospital, room, device, c
 }
 
 async function sendLineNotification(payload, config) {
+  const alertStyle = levelStyle(payload.level);
+  const tempStyle = levelStyle(payload.tempLevel);
+  const rhStyle = levelStyle(payload.rhLevel);
   const text = [
-    `แจ้งเตือน ${payload.level.toUpperCase()}`,
+    `แจ้งเตือน ${alertStyle.label}`,
     payload.hospital ? `รพ.: ${payload.hospital}` : "",
     payload.room ? `ห้อง: ${payload.room}` : "",
     payload.device ? `อุปกรณ์: ${payload.device}` : "",
@@ -354,6 +382,57 @@ async function sendLineNotification(payload, config) {
     payload.appUrl ? `ดูระบบ: ${payload.appUrl}` : ""
   ].filter(Boolean).join("\n");
 
+  const metricRow = (label, value, unit, style) => ({
+    type: "box",
+    layout: "horizontal",
+    spacing: "sm",
+    contents: [
+      { type: "text", text: label, size: "sm", color: "#344054", flex: 2 },
+      { type: "text", text: `${value} ${unit}`, size: "sm", weight: "bold", color: "#111827", flex: 2 },
+      {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: style.color,
+        cornerRadius: "md",
+        paddingAll: "4px",
+        flex: 2,
+        contents: [{ type: "text", text: style.label, size: "xs", weight: "bold", align: "center", color: style.textColor }]
+      }
+    ]
+  });
+
+  const message = {
+    type: "flex",
+    altText: text,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: alertStyle.color,
+        paddingAll: "14px",
+        contents: [
+          { type: "text", text: `แจ้งเตือน ${alertStyle.label}`, weight: "bold", size: "lg", color: alertStyle.textColor },
+          { type: "text", text: payload.hospital || "Sterile Room Monitor", size: "xs", color: alertStyle.textColor, margin: "sm", wrap: true }
+        ]
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          { type: "text", text: payload.room || "-", weight: "bold", size: "md", color: "#003b7a", wrap: true },
+          { type: "text", text: payload.device || "-", size: "sm", color: "#475467", wrap: true },
+          { type: "separator", margin: "sm" },
+          metricRow("Temp", payload.temperature, "°C", tempStyle),
+          metricRow("RH", payload.humidity, "%", rhStyle),
+          { type: "text", text: payload.message, size: "xs", color: "#475467", wrap: true, margin: "sm" }
+        ]
+      }
+    }
+  };
+
   const response = await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
     headers: {
@@ -362,7 +441,7 @@ async function sendLineNotification(payload, config) {
     },
     body: JSON.stringify({
       to: config.lineTo,
-      messages: [{ type: "text", text }]
+      messages: [message]
     })
   });
   if (!response.ok) {
@@ -814,7 +893,9 @@ async function handleApi(req, res, url) {
       : db.hospitals.find(item => item.id === user.hospitalId);
     if (!canManageTenant(user, hospital?.id)) return json(res, 403, { error: "Forbidden" });
     const notificationConfig = hospitalNotificationConfig(hospital);
-    if (!notificationConfig.url) return json(res, 400, { error: "Webhook URL is not configured for this hospital" });
+    if (!notificationConfig.url && !(notificationConfig.lineChannelAccessToken && notificationConfig.lineTo)) {
+      return json(res, 400, { error: "Notification is not configured for this hospital" });
+    }
     const room = db.rooms.find(item => item.hospitalId === hospital?.id);
     const device = db.devices.find(item => item.roomId === room?.id);
     const reading = {
