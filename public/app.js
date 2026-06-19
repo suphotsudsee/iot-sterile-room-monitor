@@ -410,7 +410,7 @@ function renderAlerts() {
 
 function renderStandards() {
   const room = selectedRoom();
-  $("#roomTitle").textContent = room ? `${room.name} (Sterile Storage Room)` : "Sterile Storage Room";
+  $("#roomTitle").textContent = room ? room.name : "กรุณาเลือกห้อง";
   $("#tempStandard").textContent = room ? `${room.tempMin} - ${room.tempMax} °C` : "20 - 24 °C";
   $("#rhStandard").textContent = room ? `${room.rhMin} - ${room.rhMax} %` : "30 - 60 %";
 }
