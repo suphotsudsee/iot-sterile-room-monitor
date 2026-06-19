@@ -351,17 +351,6 @@ function roleLabel(role) {
   }[role] || role;
 }
 
-function renderUsers() {
-  const users = state.users.filter(item => item.hospitalId === selectedHospitalId());
-  $("#userList").innerHTML = users.length
-    ? users.map(user => `<div class="device-row user-row">
-        <b>${user.name}</b>
-        <span>${roleLabel(user.role)}</span>
-        <code>${user.email}</code>
-      </div>`).join("")
-    : "<p>ยังไม่มีผู้ใช้ของโรงพยาบาลนี้</p>";
-}
-
 function actionButtons(type, id, canDelete = true) {
   return `<div class="row-actions">
     <button class="secondary-button" type="button" data-crud-action="edit" data-crud-type="${type}" data-id="${id}">แก้ไข</button>
@@ -436,7 +425,6 @@ async function loadDashboard() {
   $("#thaiYear").value = toThaiYear(month);
   renderStandards();
   renderDevices();
-  renderUsers();
   renderAlerts();
 
   const query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
