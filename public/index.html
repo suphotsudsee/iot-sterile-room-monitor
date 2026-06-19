@@ -83,6 +83,8 @@
               <h3>เพิ่ม ESP</h3>
               <input name="name" placeholder="ชื่ออุปกรณ์" required>
               <input name="deviceId" placeholder="Device ID เช่น ESP-ROOM-01">
+              <select name="roomId" id="deviceRoomSelect" required></select>
+              <span id="deviceFormMessage" class="form-message"></span>
               <button type="submit">สร้าง Device Key</button>
             </form>
             <form id="userForm">

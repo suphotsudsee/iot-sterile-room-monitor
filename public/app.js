@@ -308,6 +308,10 @@ function renderSelectors() {
   const rooms = state.rooms.filter(item => item.hospitalId === selectedHospitalId());
   $("#roomSelect").innerHTML = rooms.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
   if (rooms.some(item => item.id === currentRoomId)) $("#roomSelect").value = currentRoomId;
+  $("#deviceRoomSelect").innerHTML = rooms.length
+    ? rooms.map(item => `<option value="${item.id}">${item.name}</option>`).join("")
+    : `<option value="">ยังไม่มีห้อง กรุณาเพิ่มห้องก่อน</option>`;
+  if (rooms.some(item => item.id === currentRoomId)) $("#deviceRoomSelect").value = currentRoomId;
   renderAlertSettings();
   renderCrudLists();
   showPage(state.currentPage);
@@ -517,18 +521,38 @@ $("#roomForm").addEventListener("submit", async event => {
 
 $("#deviceForm").addEventListener("submit", async event => {
   event.preventDefault();
+  const message = $("#deviceFormMessage");
+  const button = event.currentTarget.querySelector("button[type='submit']");
+  message.textContent = "";
   const form = new FormData(event.currentTarget);
-  await api("/api/devices", {
-    method: "POST",
-    body: JSON.stringify({
-      hospitalId: selectedHospitalId(),
-      roomId: selectedRoomId(),
-      name: form.get("name"),
-      deviceId: form.get("deviceId")
-    })
-  });
-  event.currentTarget.reset();
-  await refreshAll();
+  const roomId = String(form.get("roomId") || selectedRoomId() || "");
+  if (!roomId) {
+    message.textContent = "กรุณาเพิ่มห้องก่อนสร้าง Device Key";
+    message.className = "form-message error";
+    return;
+  }
+  button.disabled = true;
+  try {
+    const result = await api("/api/devices", {
+      method: "POST",
+      body: JSON.stringify({
+        hospitalId: selectedHospitalId(),
+        roomId,
+        name: form.get("name"),
+        deviceId: form.get("deviceId")
+      })
+    });
+    event.currentTarget.reset();
+    await refreshAll();
+    $("#deviceRoomSelect").value = roomId;
+    message.textContent = `สร้าง Device Key แล้ว: ${result.device.deviceKey}`;
+    message.className = "form-message success";
+  } catch (error) {
+    message.textContent = error.message;
+    message.className = "form-message error";
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $("#deviceList").addEventListener("click", async event => {

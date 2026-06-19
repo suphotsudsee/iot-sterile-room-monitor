@@ -266,6 +266,22 @@ button {
   padding: 0 14px;
 }
 
+.form-message {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.form-message.success {
+  color: #047a2f;
+}
+
+.form-message.error {
+  color: #b42318;
+}
+
 .crud-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
