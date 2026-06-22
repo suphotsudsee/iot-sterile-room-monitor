@@ -199,6 +199,26 @@ function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function datePartsInBangkok(date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  return Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+}
+
+function localDateKey(date) {
+  const parts = datePartsInBangkok(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function localMonthKey(date) {
+  const parts = datePartsInBangkok(date);
+  return `${parts.year}-${parts.month}`;
+}
+
 function sameTenant(user, hospitalId) {
   return user.role === "system_admin" || user.hospitalId === hospitalId;
 }
@@ -548,6 +568,8 @@ async function handleApi(req, res, url) {
         temperature: Number(temperature.toFixed(2)),
         humidity: Number(humidity.toFixed(2)),
         timestamp: timestamp.toISOString(),
+        localDate: localDateKey(timestamp),
+        localMonth: localMonthKey(timestamp),
         createdAt: nowIso()
       };
       db.readings.push(reading);
@@ -849,7 +871,7 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === "/api/readings" && req.method === "GET") {
-    const month = url.searchParams.get("month") || monthKey(new Date());
+    const month = url.searchParams.get("month") || localMonthKey(new Date());
     const hospitalId = url.searchParams.get("hospitalId");
     const roomId = url.searchParams.get("roomId");
     if (hospitalId && !sameTenant(user, hospitalId)) return json(res, 403, { error: "Forbidden" });
@@ -857,8 +879,9 @@ async function handleApi(req, res, url) {
     const hospitalIds = visibleHospitalIds(user, db);
     const readings = db.readings.filter(item => {
       const dt = new Date(item.timestamp);
+      const readingMonth = item.localMonth || (Number.isFinite(dt.getTime()) ? localMonthKey(dt) : "");
       return Number.isFinite(dt.getTime())
-        && monthKey(dt) === month
+        && readingMonth === month
         && hospitalIds.includes(item.hospitalId)
         && (!hospitalId || item.hospitalId === hospitalId)
         && (!roomId || item.roomId === roomId);
@@ -913,7 +936,7 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === "/api/reports/monthly.csv" && req.method === "GET") {
-    const month = url.searchParams.get("month") || monthKey(new Date());
+    const month = url.searchParams.get("month") || localMonthKey(new Date());
     const hospitalId = url.searchParams.get("hospitalId");
     const roomId = url.searchParams.get("roomId");
     if (hospitalId && !sameTenant(user, hospitalId)) return json(res, 403, { error: "Forbidden" });
@@ -921,7 +944,8 @@ async function handleApi(req, res, url) {
     const hospitalIds = visibleHospitalIds(user, db);
     const rows = db.readings.filter(item => {
       const dt = new Date(item.timestamp);
-      return monthKey(dt) === month
+      const readingMonth = item.localMonth || (Number.isFinite(dt.getTime()) ? localMonthKey(dt) : "");
+      return readingMonth === month
         && hospitalIds.includes(item.hospitalId)
         && (!hospitalId || item.hospitalId === hospitalId)
         && (!roomId || item.roomId === roomId);

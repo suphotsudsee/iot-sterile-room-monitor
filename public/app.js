@@ -176,8 +176,10 @@ function groupDaily(readings, month) {
   }));
 
   readings.forEach(reading => {
-    const dt = new Date(reading.timestamp);
-    const slot = result[dt.getDate() - 1];
+    const localDay = String(reading.localDate || "").startsWith(`${month}-`)
+      ? Number(String(reading.localDate).split("-")[2])
+      : new Date(reading.timestamp).getDate();
+    const slot = result[localDay - 1];
     if (!slot) return;
     slot.readings = slot.readings || [];
     slot.readings.push(reading);
