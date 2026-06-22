@@ -53,6 +53,30 @@ void showReading(float temperature, float humidity) {
   lcdPrintLine(1, "RH:   " + String(humidity, 1) + " %");
 }
 
+bool scanI2cForLcd() {
+  bool found = false;
+  Serial.println("I2C scan started");
+  Serial.print("SDA pin: D5, SCL pin: D6, configured LCD address: 0x");
+  Serial.println(LCD_ADDRESS, HEX);
+
+  for (uint8_t address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    uint8_t error = Wire.endTransmission();
+    if (error == 0) {
+      Serial.print("I2C device found at 0x");
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+      found = true;
+    }
+  }
+
+  if (!found) {
+    Serial.println("No I2C device found. Check LCD VCC/GND/SDA/SCL wiring.");
+  }
+  Serial.println("I2C scan finished");
+  return found;
+}
+
 String htmlEscape(String value) {
   value.replace("&", "&amp;");
   value.replace("<", "&lt;");
@@ -258,8 +282,11 @@ void setup() {
   delay(200);
 
   Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
+  scanI2cForLcd();
+  Serial.println("LCD init started");
   lcd.init();
   lcd.backlight();
+  Serial.println("LCD init finished");
   showStatus("Sterile Monitor", "Starting...");
 
   dht.begin();
