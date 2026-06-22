@@ -177,7 +177,7 @@ async function loadDb() {
       auditLogs: []
     };
     await saveDb(db);
-    console.log(`Default login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+    console.log(`Default admin email: ${ADMIN_EMAIL}`);
     console.log(`Demo device key: ${key}`);
     return db;
   }
@@ -1002,7 +1002,7 @@ loadDb()
   .then(() => {
     server.listen(PORT, () => {
       console.log(`Sterile room SaaS monitor running at http://localhost:${PORT}`);
-      console.log(`Default admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+      console.log(`Admin email: ${ADMIN_EMAIL}`);
     });
   })
   .catch(error => {
