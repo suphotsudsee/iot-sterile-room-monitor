@@ -193,6 +193,14 @@ async function saveDb(db) {
   await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), "utf8");
 }
 
+async function backupDb(db, reason) {
+  const backupDir = path.join(DATA_DIR, "backups");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeReason = String(reason || "change").replace(/[^a-zA-Z0-9_-]/g, "_");
+  await fs.mkdir(backupDir, { recursive: true });
+  await fs.writeFile(path.join(backupDir, `${timestamp}-${safeReason}.json`), JSON.stringify(db, null, 2), "utf8");
+}
+
 async function withDb(fn) {
   const db = await loadDb();
   const result = await fn(db);
@@ -618,6 +626,22 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/bootstrap" && req.method === "GET") {
     const db = await loadDb();
     const hospitalIds = visibleHospitalIds(user, db);
+    const managementStats = {
+      hospitals: Object.fromEntries(hospitalIds.map(hospitalId => [hospitalId, {
+        rooms: db.rooms.filter(item => item.hospitalId === hospitalId).length,
+        devices: db.devices.filter(item => item.hospitalId === hospitalId).length,
+        readings: db.readings.filter(item => item.hospitalId === hospitalId).length,
+        alerts: db.alerts.filter(item => item.hospitalId === hospitalId).length,
+        users: db.users.filter(item => item.hospitalId === hospitalId).length
+      }])),
+      rooms: Object.fromEntries(db.rooms
+        .filter(item => hospitalIds.includes(item.hospitalId))
+        .map(room => [room.id, {
+          devices: db.devices.filter(item => item.roomId === room.id).length,
+          readings: db.readings.filter(item => item.roomId === room.id).length,
+          alerts: db.alerts.filter(item => item.roomId === room.id).length
+        }]))
+    };
     return json(res, 200, {
       user: cleanSessionUser(user),
       hospitals: db.hospitals.filter(item => hospitalIds.includes(item.id)).map(item => cleanHospitalForUser(item, user)),
@@ -625,6 +649,7 @@ async function handleApi(req, res, url) {
       devices: db.devices.filter(item => hospitalIds.includes(item.hospitalId)).map(item => ({ ...item, deviceKey: item.deviceKey })),
       alerts: db.alerts.filter(item => hospitalIds.includes(item.hospitalId) && !item.acknowledgedAt).slice(-50).reverse(),
       users: db.users.filter(item => item.role !== "system_admin" && hospitalIds.includes(item.hospitalId)).map(cleanUser),
+      managementStats,
       lineWebhookEvents: canManageTenant(user, hospitalIds[0])
         ? (db.lineWebhookEvents || []).filter(item => !item.hospitalId || hospitalIds.includes(item.hospitalId)).slice(-20).reverse().map(cleanLineWebhookEvent)
         : []
@@ -634,7 +659,7 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/hospitals" && req.method === "POST") {
     if (user.role !== "system_admin") return json(res, 403, { error: "System admin only" });
     const payload = await readJson(req);
-    return withDb(db => {
+    return withDb(async db => {
       const hospital = {
         id: id("hosp"),
         name: String(payload.name || "").trim(),
@@ -656,7 +681,7 @@ async function handleApi(req, res, url) {
     if (user.role !== "system_admin") return json(res, 403, { error: "System admin only" });
     const hospitalId = decodeURIComponent(url.pathname.split("/").pop() || "");
     const payload = await readJson(req);
-    return withDb(db => {
+    return withDb(async db => {
       const hospital = db.hospitals.find(item => item.id === hospitalId);
       if (!hospital) return json(res, 404, { error: "Hospital not found" });
       const name = String(payload.name || "").trim();
@@ -670,15 +695,25 @@ async function handleApi(req, res, url) {
   if (url.pathname.startsWith("/api/hospitals/") && req.method === "DELETE") {
     if (user.role !== "system_admin") return json(res, 403, { error: "System admin only" });
     const hospitalId = decodeURIComponent(url.pathname.split("/").pop() || "");
-    return withDb(db => {
+    return withDb(async db => {
       const hospital = db.hospitals.find(item => item.id === hospitalId);
       if (!hospital) return json(res, 404, { error: "Hospital not found" });
+      const related = {
+        rooms: db.rooms.filter(item => item.hospitalId === hospitalId).length,
+        devices: db.devices.filter(item => item.hospitalId === hospitalId).length,
+        readings: db.readings.filter(item => item.hospitalId === hospitalId).length,
+        alerts: db.alerts.filter(item => item.hospitalId === hospitalId).length,
+        users: db.users.filter(item => item.hospitalId === hospitalId).length
+      };
+      const totalRelated = Object.values(related).reduce((sum, count) => sum + count, 0);
+      if (totalRelated > 0) {
+        return json(res, 409, {
+          error: "ไม่สามารถลบโรงพยาบาลที่ยังมีห้อง อุปกรณ์ ข้อมูลรายวัน แจ้งเตือน หรือผู้ใช้",
+          related
+        });
+      }
+      await backupDb(db, `delete-hospital-${hospitalId}`);
       db.hospitals = db.hospitals.filter(item => item.id !== hospitalId);
-      db.rooms = db.rooms.filter(item => item.hospitalId !== hospitalId);
-      db.devices = db.devices.filter(item => item.hospitalId !== hospitalId);
-      db.readings = db.readings.filter(item => item.hospitalId !== hospitalId);
-      db.alerts = db.alerts.filter(item => item.hospitalId !== hospitalId);
-      db.users = db.users.filter(item => item.hospitalId !== hospitalId);
       return json(res, 200, { ok: true });
     });
   }
@@ -723,7 +758,7 @@ async function handleApi(req, res, url) {
   if (url.pathname.startsWith("/api/rooms/") && req.method === "PUT") {
     const roomId = decodeURIComponent(url.pathname.split("/").pop() || "");
     const payload = await readJson(req);
-    return withDb(db => {
+    return withDb(async db => {
       const room = db.rooms.find(item => item.id === roomId);
       if (!room) return json(res, 404, { error: "Room not found" });
       if (!canManageTenant(user, room.hospitalId)) return json(res, 403, { error: "Forbidden" });
@@ -745,14 +780,24 @@ async function handleApi(req, res, url) {
 
   if (url.pathname.startsWith("/api/rooms/") && req.method === "DELETE") {
     const roomId = decodeURIComponent(url.pathname.split("/").pop() || "");
-    return withDb(db => {
+    return withDb(async db => {
       const room = db.rooms.find(item => item.id === roomId);
       if (!room) return json(res, 404, { error: "Room not found" });
       if (!canManageTenant(user, room.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      const related = {
+        devices: db.devices.filter(item => item.roomId === roomId).length,
+        readings: db.readings.filter(item => item.roomId === roomId).length,
+        alerts: db.alerts.filter(item => item.roomId === roomId).length
+      };
+      const totalRelated = Object.values(related).reduce((sum, count) => sum + count, 0);
+      if (totalRelated > 0) {
+        return json(res, 409, {
+          error: "ไม่สามารถลบห้องที่ยังมีอุปกรณ์ ข้อมูลรายวัน หรือแจ้งเตือน",
+          related
+        });
+      }
+      await backupDb(db, `delete-room-${roomId}`);
       db.rooms = db.rooms.filter(item => item.id !== roomId);
-      db.devices = db.devices.filter(item => item.roomId !== roomId);
-      db.readings = db.readings.filter(item => item.roomId !== roomId);
-      db.alerts = db.alerts.filter(item => item.roomId !== roomId);
       return json(res, 200, { ok: true });
     });
   }
@@ -799,10 +844,11 @@ async function handleApi(req, res, url) {
 
   if (url.pathname.startsWith("/api/devices/") && req.method === "DELETE") {
     const deviceId = decodeURIComponent(url.pathname.split("/").pop() || "");
-    return withDb(db => {
+    return withDb(async db => {
       const device = db.devices.find(item => item.id === deviceId);
       if (!device) return json(res, 404, { error: "Device not found" });
       if (!canManageTenant(user, device.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      await backupDb(db, `delete-device-${deviceId}`);
       db.devices = db.devices.filter(item => item.id !== deviceId);
       return json(res, 200, { ok: true });
     });
@@ -860,10 +906,11 @@ async function handleApi(req, res, url) {
 
   if (url.pathname.startsWith("/api/users/") && req.method === "DELETE") {
     const targetUserId = decodeURIComponent(url.pathname.split("/").pop() || "");
-    return withDb(db => {
+    return withDb(async db => {
       const target = db.users.find(item => item.id === targetUserId && item.role !== "system_admin");
       if (!target) return json(res, 404, { error: "User not found" });
       if (!canManageTenant(user, target.hospitalId)) return json(res, 403, { error: "Forbidden" });
+      await backupDb(db, `delete-user-${targetUserId}`);
       db.users = db.users.filter(item => item.id !== targetUserId);
       return json(res, 200, { ok: true });
     });

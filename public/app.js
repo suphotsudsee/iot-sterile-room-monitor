@@ -7,6 +7,7 @@ const state = {
   users: [],
   readings: [],
   lineWebhookEvents: [],
+  managementStats: { hospitals: {}, rooms: {} },
   currentPage: "dashboard"
 };
 
@@ -379,7 +380,9 @@ function roleLabel(role) {
 function actionButtons(type, id, canDelete = true) {
   return `<div class="row-actions">
     <button class="secondary-button" type="button" data-crud-action="edit" data-crud-type="${type}" data-id="${id}">แก้ไข</button>
-    ${canDelete ? `<button class="danger-button" type="button" data-crud-action="delete" data-crud-type="${type}" data-id="${id}">ลบ</button>` : ""}
+    ${canDelete
+      ? `<button class="danger-button" type="button" data-crud-action="delete" data-crud-type="${type}" data-id="${id}">ลบ</button>`
+      : `<button class="disabled-delete-button" type="button" disabled title="ยังมีข้อมูลที่เกี่ยวข้อง">ลบไม่ได้</button>`}
   </div>`;
 }
 
@@ -393,17 +396,31 @@ function renderCrudLists() {
 
   $("#hospitalCrud").classList.toggle("hidden", state.user?.role !== "system_admin");
   $("#hospitalCrudList").innerHTML = state.hospitals.length
-    ? state.hospitals.map(hospital => `<div class="crud-row">
-        <div><b>${escapeHtml(hospital.name)}</b><span>${escapeHtml(hospital.code || "-")}</span></div>
-        ${actionButtons("hospital", hospital.id)}
-      </div>`).join("")
+    ? state.hospitals.map(hospital => {
+        const stats = state.managementStats?.hospitals?.[hospital.id] || {};
+        const relatedCount = Object.values(stats).reduce((sum, count) => sum + Number(count || 0), 0);
+        return `<div class="crud-row">
+          <div>
+            <b>${escapeHtml(hospital.name)}</b>
+            <span>${escapeHtml(hospital.code || "-")} · ห้อง ${stats.rooms || 0} · ESP ${stats.devices || 0} · ข้อมูล ${stats.readings || 0} · ผู้ใช้ ${stats.users || 0}</span>
+          </div>
+          ${actionButtons("hospital", hospital.id, relatedCount === 0)}
+        </div>`;
+      }).join("")
     : "<p>ยังไม่มีโรงพยาบาล</p>";
 
   $("#roomCrudList").innerHTML = rooms.length
-    ? rooms.map(room => `<div class="crud-row">
-        <div><b>${escapeHtml(room.name)}</b><span>Temp ${room.tempMin}-${room.tempMax} °C / RH ${room.rhMin}-${room.rhMax} %</span></div>
-        ${actionButtons("room", room.id)}
-      </div>`).join("")
+    ? rooms.map(room => {
+        const stats = state.managementStats?.rooms?.[room.id] || {};
+        const relatedCount = Object.values(stats).reduce((sum, count) => sum + Number(count || 0), 0);
+        return `<div class="crud-row">
+          <div>
+            <b>${escapeHtml(room.name)}</b>
+            <span>Temp ${room.tempMin}-${room.tempMax} °C / RH ${room.rhMin}-${room.rhMax} % · ESP ${stats.devices || 0} · ข้อมูล ${stats.readings || 0}</span>
+          </div>
+          ${actionButtons("room", room.id, relatedCount === 0)}
+        </div>`;
+      }).join("")
     : "<p>ยังไม่มีห้องในโรงพยาบาลนี้</p>";
 
   $("#deviceCrudList").innerHTML = devices.length

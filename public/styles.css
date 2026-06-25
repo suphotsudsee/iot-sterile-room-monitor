@@ -426,6 +426,15 @@ button {
   background: #a91f1f;
 }
 
+.disabled-delete-button {
+  min-height: 34px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #d0d5dd !important;
+  color: #667085 !important;
+  cursor: not-allowed;
+}
+
 .alert-list {
   display: grid;
   gap: 8px;
