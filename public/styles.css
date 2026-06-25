@@ -452,6 +452,10 @@ button {
   background: #ffd1d1;
 }
 
+.alert.low {
+  background: #e2f1ff;
+}
+
 .standards {
   display: grid;
   grid-template-columns: 420px 1fr 260px;
@@ -523,6 +527,7 @@ h3 {
 .caution { background: linear-gradient(135deg, #fff7ad, #ffd760); }
 .high { background: linear-gradient(135deg, #ffd3a0, #ffad67); }
 .critical { background: linear-gradient(135deg, #ffb3b3, #ff777e); }
+.low { background: linear-gradient(135deg, #d8ebff, #9fcaff); }
 .normal span { background: var(--normal); }
 .caution span { background: var(--caution); border: 2px solid #1a1a1a; }
 .high span { background: var(--high); }
@@ -692,7 +697,7 @@ h3 {
 
 .summary-card-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
 }
 

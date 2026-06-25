@@ -117,6 +117,11 @@ async function loadDb() {
     const raw = await fs.readFile(DB_FILE, "utf8");
     const db = JSON.parse(raw);
     db.lineWebhookEvents = Array.isArray(db.lineWebhookEvents) ? db.lineWebhookEvents : [];
+    for (const alert of db.alerts || []) {
+      const reading = (db.readings || []).find(item => item.id === alert.readingId);
+      const room = (db.rooms || []).find(item => item.id === alert.roomId);
+      if (reading && room) alert.level = alertLevel(reading, room);
+    }
     return db;
   } catch {
     const hospitalId = id("hosp");
@@ -289,23 +294,24 @@ async function requireUser(req, res) {
 }
 
 function alertLevel(reading, room) {
-  if (reading.temperature > 28 || reading.humidity > 70 || reading.temperature < room.tempMin || reading.humidity < room.rhMin) {
-    return "critical";
-  }
+  if (reading.temperature > 28 || reading.humidity > 70) return "critical";
+  if (reading.temperature < room.tempMin || reading.humidity < room.rhMin) return "low";
   if (reading.temperature > 26 || reading.humidity > 65) return "high";
   if (reading.temperature > room.tempMax || reading.humidity > room.rhMax) return "caution";
   return "normal";
 }
 
 function tempLevel(reading, room) {
-  if (reading.temperature > 28 || reading.temperature < room.tempMin) return "critical";
+  if (reading.temperature < room.tempMin) return "low";
+  if (reading.temperature > 28) return "critical";
   if (reading.temperature > 26) return "high";
   if (reading.temperature > room.tempMax) return "caution";
   return "normal";
 }
 
 function rhLevel(reading, room) {
-  if (reading.humidity > 70 || reading.humidity < room.rhMin) return "critical";
+  if (reading.humidity < room.rhMin) return "low";
+  if (reading.humidity > 70) return "critical";
   if (reading.humidity > 65) return "high";
   if (reading.humidity > room.rhMax) return "caution";
   return "normal";
@@ -316,7 +322,8 @@ function levelStyle(level) {
     normal: { label: "ปกติ", color: "#03a624", textColor: "#ffffff" },
     caution: { label: "เฝ้าระวัง", color: "#ffe900", textColor: "#111827" },
     high: { label: "เสี่ยงสูง", color: "#ff7600", textColor: "#111827" },
-    critical: { label: "วิกฤต", color: "#f40c0c", textColor: "#ffffff" }
+    critical: { label: "วิกฤต", color: "#f40c0c", textColor: "#ffffff" },
+    low: { label: "ต่ำกว่าเกณฑ์", color: "#082f86", textColor: "#ffffff" }
   }[level] || { label: level, color: "#526174", textColor: "#ffffff" };
 }
 

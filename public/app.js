@@ -121,7 +121,8 @@ function tempLevel(value) {
   const min = room?.tempMin ?? 20;
   const max = room?.tempMax ?? 24;
   if (!Number.isFinite(value)) return null;
-  if (value > 28 || value < min) return "critical";
+  if (value < min) return "low";
+  if (value > 28) return "critical";
   if (value > 26) return "high";
   if (value > max) return "caution";
   return "normal";
@@ -132,7 +133,8 @@ function rhLevel(value) {
   const min = room?.rhMin ?? 30;
   const max = room?.rhMax ?? 60;
   if (!Number.isFinite(value)) return null;
-  if (value > 70 || value < min) return "critical";
+  if (value < min) return "low";
+  if (value > 70) return "critical";
   if (value > 65) return "high";
   if (value > max) return "caution";
   return "normal";
@@ -141,13 +143,14 @@ function rhLevel(value) {
 function overallLevel(day) {
   const levels = [tempLevel(day.temperature), rhLevel(day.humidity)];
   if (levels.includes("critical")) return "critical";
+  if (levels.includes("low")) return "low";
   if (levels.includes("high")) return "high";
   if (levels.includes("caution")) return "caution";
   return "normal";
 }
 
 function levelRank(level) {
-  return { normal: 0, caution: 1, high: 2, critical: 3 }[level] ?? -1;
+  return { normal: 0, caution: 1, high: 2, low: 3, critical: 4 }[level] ?? -1;
 }
 
 function pickDailyDisplayValue(items, getValue, getLevel) {
@@ -247,8 +250,8 @@ function drawSummary(days) {
   setText("#minRh", rhValues.length ? format(Math.min(...rhValues)) : "-");
   setText("#avgRh", format(mean(rhValues)));
 
-  const tempCounts = { normal: 0, caution: 0, high: 0, critical: 0 };
-  const rhCounts = { normal: 0, caution: 0, high: 0, critical: 0 };
+  const tempCounts = { normal: 0, caution: 0, high: 0, critical: 0, low: 0 };
+  const rhCounts = { normal: 0, caution: 0, high: 0, critical: 0, low: 0 };
   available.forEach(day => {
     tempCounts[tempLevel(day.temperature)] += 1;
     rhCounts[rhLevel(day.humidity)] += 1;
@@ -258,7 +261,8 @@ function drawSummary(days) {
     { key: "normal", title: "ปกติ (เขียว)", className: "normal" },
     { key: "caution", title: "เฝ้าระวัง (เหลือง)", className: "caution" },
     { key: "high", title: "เสี่ยงสูง (ส้ม)", className: "high" },
-    { key: "critical", title: "วิกฤต (แดง)", className: "critical" }
+    { key: "critical", title: "วิกฤต (แดง)", className: "critical" },
+    { key: "low", title: "ต่ำกว่าเกณฑ์ (น้ำเงิน)", className: "low" }
   ];
 
   function renderMetricSummary(title, unit, counts) {
