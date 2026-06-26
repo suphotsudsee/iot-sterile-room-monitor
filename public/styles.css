@@ -63,6 +63,7 @@ body {
 
 .login-box input,
 .management input,
+.management select,
 .saas-toolbar select {
   width: 100%;
   border: 1px solid #9cb5df;
@@ -217,6 +218,28 @@ button {
 .page-tabs button.active {
   background: var(--blue);
   color: white;
+}
+
+.hospital-name-display {
+  display: grid;
+  gap: 6px;
+}
+
+.hospital-name-display span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.hospital-name-display strong {
+  min-height: 40px;
+  display: grid;
+  align-items: center;
+  border: 1px solid #9cb5df;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #eef5ff;
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .page-view {

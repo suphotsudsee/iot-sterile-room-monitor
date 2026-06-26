@@ -306,9 +306,13 @@ function renderLatestReadings(readings) {
 function renderSelectors() {
   const currentHospitalId = $("#hospitalSelect").value || state.user?.hospitalId;
   const currentRoomId = $("#roomSelect").value;
-  $("#hospitalSelect").innerHTML = state.hospitals.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
+  const canSwitchHospital = state.user?.role === "system_admin";
+  $("#hospitalSelect").innerHTML = state.hospitals.map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");
   if (state.hospitals.some(item => item.id === currentHospitalId)) $("#hospitalSelect").value = currentHospitalId;
-  $("#hospitalSelect").disabled = state.user?.role !== "system_admin";
+  $("#hospitalSelect").disabled = !canSwitchHospital;
+  $("#hospitalSelect").classList.toggle("hidden", !canSwitchHospital);
+  $("#hospitalNameDisplay").classList.toggle("hidden", canSwitchHospital);
+  $("#hospitalNameText").textContent = selectedHospital()?.name || "-";
   $("#hospitalForm").classList.toggle("hidden", state.user?.role !== "system_admin");
   const canManage = canManageCurrentUser();
   $("#roomForm").classList.toggle("hidden", !canManage);
@@ -319,6 +323,9 @@ function renderSelectors() {
   $("#userRoleSelect").innerHTML = state.user?.role === "system_admin"
     ? `<option value="hospital_admin">ผู้ดูแล รพ.</option><option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`
     : `<option value="staff">เจ้าหน้าที่</option><option value="auditor">ผู้ตรวจสอบ</option>`;
+  $("#userHospitalSelect").innerHTML = state.hospitals.map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");
+  if (state.hospitals.some(item => item.id === currentHospitalId)) $("#userHospitalSelect").value = currentHospitalId;
+  $("#userHospitalSelect").classList.toggle("hidden", !canSwitchHospital);
   const rooms = state.rooms.filter(item => item.hospitalId === selectedHospitalId());
   $("#roomSelect").innerHTML = rooms.map(item => `<option value="${item.id}">${item.name}</option>`).join("");
   if (rooms.some(item => item.id === currentRoomId)) $("#roomSelect").value = currentRoomId;
@@ -695,10 +702,11 @@ $("#userForm").addEventListener("submit", async event => {
   event.preventDefault();
   const formElement = event.currentTarget;
   const form = new FormData(formElement);
+  const hospitalId = String(form.get("hospitalId") || selectedHospitalId());
   await api("/api/users", {
     method: "POST",
     body: JSON.stringify({
-      hospitalId: selectedHospitalId(),
+      hospitalId,
       name: form.get("name"),
       email: form.get("email"),
       password: form.get("password"),
@@ -706,6 +714,7 @@ $("#userForm").addEventListener("submit", async event => {
     })
   });
   formElement.reset();
+  if (state.user?.role === "system_admin") $("#hospitalSelect").value = hospitalId;
   await refreshAll();
 });
 

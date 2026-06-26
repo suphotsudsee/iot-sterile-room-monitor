@@ -50,6 +50,9 @@
         <label>
           โรงพยาบาล
           <select id="hospitalSelect"></select>
+          <div id="hospitalNameDisplay" class="hospital-name-display hidden">
+            <strong id="hospitalNameText">-</strong>
+          </div>
         </label>
         <label>
           ห้อง
@@ -89,6 +92,7 @@
             </form>
             <form id="userForm">
               <h3>เพิ่มผู้ใช้</h3>
+              <select name="hospitalId" id="userHospitalSelect" required></select>
               <input name="name" placeholder="ชื่อผู้ใช้" required>
               <input name="email" type="email" placeholder="email" required>
               <input name="password" type="password" placeholder="password" required>
