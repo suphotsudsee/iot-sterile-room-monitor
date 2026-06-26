@@ -81,6 +81,12 @@ function selectedHospital() {
   return state.hospitals.find(hospital => hospital.id === selectedHospitalId());
 }
 
+function publicOrigin() {
+  const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+  if (isLocal) return location.origin;
+  return `https://${location.host}`;
+}
+
 function currentDeviceName(reading) {
   return state.devices.find(device => device.id === reading?.deviceId)?.name
     || reading?.deviceName
@@ -341,7 +347,7 @@ function renderSelectors() {
 function renderAlertSettings() {
   const hospital = selectedHospital();
   if (!hospital || !$("#alertSettingsForm")) return;
-  $("#lineWebhookUrl").value = `${location.origin}/api/line/webhook?hospitalId=${encodeURIComponent(hospital.id)}`;
+  $("#lineWebhookUrl").value = `${publicOrigin()}/api/line/webhook?hospitalId=${encodeURIComponent(hospital.id)}`;
   $("#alertSettingsForm").elements.lineChannelAccessToken.value = hospital.lineChannelAccessToken || "";
   $("#alertSettingsForm").elements.lineTo.value = hospital.lineTo || "";
   $("#alertSettingsForm").elements.alertWebhookUrl.value = hospital.alertWebhookUrl || "";
@@ -361,7 +367,7 @@ function renderLineWebhookEvents() {
           <small>${new Date(event.receivedAt).toLocaleString("th-TH")}</small>
         </button>
       `).join("")
-    : `<p>ยังไม่มี LINE ID ให้เพิ่มบอทเป็นเพื่อนหรือเชิญเข้ากลุ่ม แล้วส่งข้อความหา Bot 1 ครั้ง</p>`;
+    : `<p>ยังไม่มี LINE ID ให้เพิ่มบอทเป็นเพื่อนหรือเชิญเข้ากลุ่ม แล้วส่งข้อความหา Bot 1 ครั้ง จากนั้นกดโหลด LINE ID ล่าสุด และตรวจว่า Webhook URL ใน LINE เป็น HTTPS ของ รพ. นี้</p>`;
 }
 
 function renderDevices() {
@@ -740,6 +746,21 @@ $("#lineWebhookEvents").addEventListener("click", event => {
   const button = event.target.closest(".line-event-button");
   if (!button) return;
   $("#alertSettingsForm").elements.lineTo.value = button.dataset.lineId;
+});
+
+$("#refreshLineIdsButton").addEventListener("click", async () => {
+  const form = $("#alertSettingsForm");
+  const currentValues = {
+    lineChannelAccessToken: form.elements.lineChannelAccessToken.value,
+    lineTo: form.elements.lineTo.value,
+    alertWebhookUrl: form.elements.alertWebhookUrl.value,
+    alertWebhookToken: form.elements.alertWebhookToken.value,
+    alertCooldownMinutes: form.elements.alertCooldownMinutes.value
+  };
+  await loadBootstrap();
+  Object.entries(currentValues).forEach(([key, value]) => {
+    form.elements[key].value = value;
+  });
 });
 
 $("#testAlertButton").addEventListener("click", async () => {
