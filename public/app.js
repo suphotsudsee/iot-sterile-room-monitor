@@ -27,6 +27,13 @@ const rhRows = [
   { key: "low", label: "< 30 %", className: "low", color: "#082f86" }
 ];
 
+const validSensorRange = {
+  tempMin: 5,
+  tempMax: 50,
+  rhMin: 1,
+  rhMax: 100
+};
+
 const $ = selector => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -63,6 +70,21 @@ function mean(values) {
 
 function format(value, decimals = 1) {
   return Number.isFinite(value) ? value.toFixed(decimals) : "-";
+}
+
+function isValidReading(reading) {
+  const temperature = Number(reading?.temperature);
+  const humidity = Number(reading?.humidity);
+  return Number.isFinite(temperature)
+    && Number.isFinite(humidity)
+    && temperature >= validSensorRange.tempMin
+    && temperature <= validSensorRange.tempMax
+    && humidity >= validSensorRange.rhMin
+    && humidity <= validSensorRange.rhMax;
+}
+
+function cleanReadings(readings) {
+  return (readings || []).filter(isValidReading);
 }
 
 function selectedHospitalId() {
@@ -486,9 +508,24 @@ async function loadDashboard() {
   renderDevices();
   renderAlerts();
 
-  const query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
-  const payload = await api(`/api/readings?${query}`);
-  state.readings = payload.readings || [];
+  let query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
+  let payload = await api(`/api/readings?${query}`);
+  state.readings = cleanReadings(payload.readings);
+  if (!state.readings.length && selectedRoomId()) {
+    const allQuery = new URLSearchParams({ month, hospitalId: selectedHospitalId() });
+    const allPayload = await api(`/api/readings?${allQuery}`);
+    const latest = cleanReadings(allPayload.readings)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+    if (latest?.roomId && latest.roomId !== selectedRoomId() && state.rooms.some(room => room.id === latest.roomId)) {
+      $("#roomSelect").value = latest.roomId;
+      renderStandards();
+      renderDevices();
+      renderAlerts();
+      query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
+      payload = await api(`/api/readings?${query}`);
+      state.readings = cleanReadings(payload.readings);
+    }
+  }
   const days = groupDaily(state.readings, month);
   drawGrid($("#tempGrid"), tempRows, days, day => day.temperature, tempLevel);
   drawGrid($("#humidityGrid"), rhRows, days, day => day.humidity, rhLevel);

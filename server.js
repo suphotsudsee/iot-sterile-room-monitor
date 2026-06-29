@@ -16,6 +16,10 @@ const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
 const ALERT_WEBHOOK_TOKEN = process.env.ALERT_WEBHOOK_TOKEN || "";
 const ALERT_COOLDOWN_MINUTES = Number(process.env.ALERT_COOLDOWN_MINUTES || 30);
 const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL || "";
+const VALID_TEMP_MIN = Number(process.env.VALID_TEMP_MIN || 5);
+const VALID_TEMP_MAX = Number(process.env.VALID_TEMP_MAX || 50);
+const VALID_RH_MIN = Number(process.env.VALID_RH_MIN || 1);
+const VALID_RH_MAX = Number(process.env.VALID_RH_MAX || 100);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -562,6 +566,9 @@ async function handleApi(req, res, url) {
     const timestamp = payload.timestamp ? new Date(payload.timestamp) : new Date();
     if (!Number.isFinite(temperature) || !Number.isFinite(humidity) || !Number.isFinite(timestamp.getTime())) {
       return json(res, 400, { error: "Required: temperature, humidity, optional timestamp" });
+    }
+    if (temperature < VALID_TEMP_MIN || temperature > VALID_TEMP_MAX || humidity < VALID_RH_MIN || humidity > VALID_RH_MAX) {
+      return json(res, 422, { error: "Sensor value out of accepted range. Check DHT sensor wiring or power." });
     }
 
     return withDb(async db => {
