@@ -438,7 +438,11 @@ function renderCrudLists() {
 
   $("#deviceCrudList").innerHTML = devices.length
     ? devices.map(device => `<div class="crud-row">
-        <div><b>${escapeHtml(device.name)}</b><span>${escapeHtml(roomName(device.roomId))} / ${escapeHtml(device.deviceId || "-")}</span></div>
+        <div>
+          <b>${escapeHtml(device.name)}</b>
+          <span>${escapeHtml(roomName(device.roomId))} / ${escapeHtml(device.deviceId || "-")}</span>
+          <code class="device-key-code">DEV: ${escapeHtml(device.deviceKey || "-")}</code>
+        </div>
         ${actionButtons("device", device.id)}
       </div>`).join("")
     : "<p>ยังไม่มี ESP ในโรงพยาบาลนี้</p>";
