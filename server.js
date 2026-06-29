@@ -565,10 +565,11 @@ async function handleApi(req, res, url) {
     }
 
     return withDb(async db => {
-      const key = String(payload.deviceKey || "");
-      const payloadDeviceId = String(payload.deviceId || payload.device || "");
-      const device = db.devices.find(item => item.deviceKey === key)
-        || db.devices.find(item => item.deviceId === payloadDeviceId);
+      const key = String(payload.deviceKey || "").trim();
+      const payloadDeviceId = String(payload.deviceId || payload.device || "").trim();
+      const device = key
+        ? db.devices.find(item => item.deviceKey === key)
+        : db.devices.find(item => item.deviceId === payloadDeviceId);
       if (!device) return json(res, 403, { error: "Unknown device. Register device key first." });
 
       const room = db.rooms.find(item => item.id === device.roomId);

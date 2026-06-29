@@ -215,6 +215,12 @@ bool connectWiFi() {
 }
 
 int postReading(float temperature, float humidity) {
+  if (strlen(config.deviceKey) == 0) {
+    Serial.println("Device Key is empty. Open setup page and paste DEV key from web.");
+    showStatus("Missing DEV Key", "Open setup page");
+    return -2;
+  }
+
   HTTPClient http;
   std::unique_ptr<BearSSL::WiFiClientSecure> secureClient;
   WiFiClient plainClient;
