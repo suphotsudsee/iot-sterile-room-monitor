@@ -2,6 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const mqtt = require("mqtt");
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
@@ -20,6 +21,11 @@ const VALID_TEMP_MIN = Number(process.env.VALID_TEMP_MIN || 5);
 const VALID_TEMP_MAX = Number(process.env.VALID_TEMP_MAX || 50);
 const VALID_RH_MIN = Number(process.env.VALID_RH_MIN || 1);
 const VALID_RH_MAX = Number(process.env.VALID_RH_MAX || 100);
+const MQTT_ENABLED = String(process.env.MQTT_ENABLED || "true").toLowerCase() !== "false";
+const MQTT_URL = process.env.MQTT_URL || "mqtt://mqtt-broker:1883";
+const MQTT_USERNAME = process.env.MQTT_USERNAME || "sterile_iot";
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || "change-this-mqtt-password";
+const MQTT_TOPIC = process.env.MQTT_TOPIC || "hospitals/+/rooms/+/devices/+/readings";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -210,6 +216,83 @@ async function withDb(fn) {
   const result = await fn(db);
   await saveDb(db);
   return result;
+}
+
+async function recordReading(payload, source = "http") {
+  const temperature = Number(payload.temperature ?? payload.temp);
+  const humidity = Number(payload.humidity ?? payload.rh);
+  const timestamp = payload.timestamp ? new Date(payload.timestamp) : new Date();
+  if (!Number.isFinite(temperature) || !Number.isFinite(humidity) || !Number.isFinite(timestamp.getTime())) {
+    const error = new Error("Required: temperature, humidity, optional timestamp");
+    error.status = 400;
+    throw error;
+  }
+  if (temperature < VALID_TEMP_MIN || temperature > VALID_TEMP_MAX || humidity < VALID_RH_MIN || humidity > VALID_RH_MAX) {
+    const error = new Error("Sensor value out of accepted range. Check DHT sensor wiring or power.");
+    error.status = 422;
+    throw error;
+  }
+
+  return withDb(async db => {
+    const key = String(payload.deviceKey || "").trim();
+    const payloadDeviceId = String(payload.deviceId || payload.device || "").trim();
+    const device = key
+      ? db.devices.find(item => item.deviceKey === key)
+      : db.devices.find(item => item.deviceId === payloadDeviceId);
+    if (!device) {
+      const error = new Error("Unknown device. Register device key first.");
+      error.status = 403;
+      throw error;
+    }
+
+    const room = db.rooms.find(item => item.id === device.roomId);
+    const hospital = db.hospitals.find(item => item.id === device.hospitalId);
+    const notificationConfig = hospitalNotificationConfig(hospital);
+    const reading = {
+      id: id("read"),
+      hospitalId: device.hospitalId,
+      roomId: device.roomId,
+      deviceId: device.id,
+      deviceName: device.name,
+      temperature: Number(temperature.toFixed(2)),
+      humidity: Number(humidity.toFixed(2)),
+      source,
+      timestamp: timestamp.toISOString(),
+      localDate: localDateKey(timestamp),
+      localMonth: localMonthKey(timestamp),
+      createdAt: nowIso()
+    };
+    db.readings.push(reading);
+    device.lastSeenAt = reading.timestamp;
+
+    const level = room ? alertLevel(reading, room) : "normal";
+    if (level !== "normal" && room) {
+      const alert = {
+        id: id("alert"),
+        hospitalId: device.hospitalId,
+        roomId: device.roomId,
+        deviceId: device.id,
+        readingId: reading.id,
+        level,
+        message: makeAlertMessage(reading, room, device),
+        acknowledgedAt: null,
+        notificationSentAt: null,
+        notificationError: null,
+        createdAt: nowIso()
+      };
+      db.alerts.push(alert);
+      if (shouldSendNotification(db, alert, notificationConfig)) {
+        try {
+          await sendAlertNotification({ alert, reading, hospital, room, device, config: notificationConfig });
+          alert.notificationSentAt = nowIso();
+        } catch (error) {
+          alert.notificationError = error.message || "Notification failed";
+          console.error(alert.notificationError);
+        }
+      }
+    }
+    return { ok: true, reading, alertLevel: level };
+  });
 }
 
 function monthKey(date) {
@@ -561,71 +644,12 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === "/api/readings" && req.method === "POST") {
     const payload = await readJson(req);
-    const temperature = Number(payload.temperature ?? payload.temp);
-    const humidity = Number(payload.humidity ?? payload.rh);
-    const timestamp = payload.timestamp ? new Date(payload.timestamp) : new Date();
-    if (!Number.isFinite(temperature) || !Number.isFinite(humidity) || !Number.isFinite(timestamp.getTime())) {
-      return json(res, 400, { error: "Required: temperature, humidity, optional timestamp" });
+    try {
+      const result = await recordReading(payload, "http");
+      return json(res, 201, result);
+    } catch (error) {
+      return json(res, error.status || 500, { error: error.message || "Reading failed" });
     }
-    if (temperature < VALID_TEMP_MIN || temperature > VALID_TEMP_MAX || humidity < VALID_RH_MIN || humidity > VALID_RH_MAX) {
-      return json(res, 422, { error: "Sensor value out of accepted range. Check DHT sensor wiring or power." });
-    }
-
-    return withDb(async db => {
-      const key = String(payload.deviceKey || "").trim();
-      const payloadDeviceId = String(payload.deviceId || payload.device || "").trim();
-      const device = key
-        ? db.devices.find(item => item.deviceKey === key)
-        : db.devices.find(item => item.deviceId === payloadDeviceId);
-      if (!device) return json(res, 403, { error: "Unknown device. Register device key first." });
-
-      const room = db.rooms.find(item => item.id === device.roomId);
-      const hospital = db.hospitals.find(item => item.id === device.hospitalId);
-      const notificationConfig = hospitalNotificationConfig(hospital);
-      const reading = {
-        id: id("read"),
-        hospitalId: device.hospitalId,
-        roomId: device.roomId,
-        deviceId: device.id,
-        deviceName: device.name,
-        temperature: Number(temperature.toFixed(2)),
-        humidity: Number(humidity.toFixed(2)),
-        timestamp: timestamp.toISOString(),
-        localDate: localDateKey(timestamp),
-        localMonth: localMonthKey(timestamp),
-        createdAt: nowIso()
-      };
-      db.readings.push(reading);
-      device.lastSeenAt = reading.timestamp;
-
-      const level = room ? alertLevel(reading, room) : "normal";
-      if (level !== "normal" && room) {
-        const alert = {
-          id: id("alert"),
-          hospitalId: device.hospitalId,
-          roomId: device.roomId,
-          deviceId: device.id,
-          readingId: reading.id,
-          level,
-          message: makeAlertMessage(reading, room, device),
-          acknowledgedAt: null,
-          notificationSentAt: null,
-          notificationError: null,
-          createdAt: nowIso()
-        };
-        db.alerts.push(alert);
-        if (shouldSendNotification(db, alert, notificationConfig)) {
-          try {
-            await sendAlertNotification({ alert, reading, hospital, room, device, config: notificationConfig });
-            alert.notificationSentAt = nowIso();
-          } catch (error) {
-            alert.notificationError = error.message || "Notification failed";
-            console.error(alert.notificationError);
-          }
-        }
-      }
-      return json(res, 201, { ok: true, reading, alertLevel: level });
-    });
   }
 
   const user = await requireUser(req, res);
@@ -1046,6 +1070,43 @@ async function serveStatic(req, res, url) {
   }
 }
 
+function startMqttSubscriber() {
+  if (!MQTT_ENABLED) {
+    console.log("MQTT subscriber disabled");
+    return;
+  }
+
+  const client = mqtt.connect(MQTT_URL, {
+    username: MQTT_USERNAME,
+    password: MQTT_PASSWORD,
+    reconnectPeriod: 5000,
+    connectTimeout: 10000,
+    clientId: `sterile-room-server-${crypto.randomBytes(4).toString("hex")}`
+  });
+
+  client.on("connect", () => {
+    console.log(`MQTT connected: ${MQTT_URL}`);
+    client.subscribe(MQTT_TOPIC, { qos: 1 }, error => {
+      if (error) console.error("MQTT subscribe failed:", error.message);
+      else console.log(`MQTT subscribed: ${MQTT_TOPIC}`);
+    });
+  });
+
+  client.on("message", async (topic, message) => {
+    try {
+      const payload = JSON.parse(message.toString("utf8"));
+      await recordReading({ ...payload, mqttTopic: topic }, "mqtt");
+      console.log(`MQTT reading saved from ${topic}`);
+    } catch (error) {
+      console.error(`MQTT reading failed from ${topic}:`, error.message || error);
+    }
+  });
+
+  client.on("error", error => {
+    console.error("MQTT error:", error.message || error);
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -1065,6 +1126,7 @@ loadDb()
     server.listen(PORT, () => {
       console.log(`Sterile room SaaS monitor running at http://localhost:${PORT}`);
       console.log(`Admin email: ${ADMIN_EMAIL}`);
+      startMqttSubscriber();
     });
   })
   .catch(error => {

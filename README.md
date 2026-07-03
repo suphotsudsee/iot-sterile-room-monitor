@@ -354,4 +354,37 @@ hospitals/{hospitalId}/rooms/{roomId}/devices/{deviceId}/readings
 }
 ```
 
-ขั้นต่อไปคือเพิ่ม MQTT subscriber ใน `server.js` และเพิ่ม MQTT publish ใน ESP เพื่อให้ข้อมูลเข้า database ผ่าน MQTT ได้
+`server.js` subscribe topic นี้แล้ว และจะบันทึกข้อมูลเข้า database เหมือน HTTP POST
+
+### เปิด MQTT ใน ESP
+
+ใน Arduino IDE ติดตั้ง library:
+
+```text
+PubSubClient
+```
+
+ในไฟล์ `esp8266_dht_monitor.ino` เปลี่ยน:
+
+```cpp
+#define USE_MQTT 0
+```
+
+เป็น:
+
+```cpp
+#define USE_MQTT 1
+```
+
+แล้วอัปโหลดเข้า ESP ใหม่ จากนั้นเข้า setup page ของ ESP แล้วกรอก:
+
+```text
+Enable MQTT = เปิด
+MQTT Host = iot.phoubon.in.th
+MQTT Port = 1883
+MQTT Username = sterile_iot
+MQTT Password = ค่าจาก MQTT_PASSWORD ใน Coolify
+MQTT Topic = hospitals/{hospitalId}/rooms/{roomId}/devices/{deviceId}/readings
+```
+
+เมื่อเปิด MQTT แล้ว ESP จะใช้ MQTT เป็นทางหลัก ถ้า MQTT ส่งไม่สำเร็จจะ fallback ไป HTTP เดิม เพื่อไม่ให้ข้อมูลในรายงานซ้ำ

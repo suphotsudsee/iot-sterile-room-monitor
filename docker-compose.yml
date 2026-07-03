@@ -12,8 +12,15 @@ services:
       ALERT_WEBHOOK_URL: ""
       ALERT_WEBHOOK_TOKEN: ""
       ALERT_COOLDOWN_MINUTES: "30"
+      MQTT_ENABLED: "true"
+      MQTT_URL: mqtt://mqtt-broker:1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-sterile_iot}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-this-mqtt-password}
+      MQTT_TOPIC: hospitals/+/rooms/+/devices/+/readings
     volumes:
       - sterile-room-monitor-data:/app/data
+    depends_on:
+      - mqtt-broker
     restart: unless-stopped
 
   mqtt-broker:

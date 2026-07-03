@@ -14,6 +14,11 @@
 #include <BlynkSimpleEsp8266.h>
 #endif
 
+#define USE_MQTT 0
+#if USE_MQTT
+#include <PubSubClient.h>
+#endif
+
 #define DHT_PIN D2
 #define DHT_TYPE DHT22
 #define LCD_SDA_PIN D5
@@ -36,12 +41,22 @@ struct DeviceConfig {
   char deviceKey[64];
   char blynkToken[80];
   uint8_t blynkEnabled;
+  char mqttHost[80];
+  uint16_t mqttPort;
+  char mqttUsername[40];
+  char mqttPassword[64];
+  char mqttTopic[128];
+  uint8_t mqttEnabled;
 };
 
 DHT dht(DHT_PIN, DHT_TYPE);
 LiquidCrystal_I2C lcd(LCD_ADDRESS, 16, 2);
 ESP8266WebServer webServer(80);
 DeviceConfig config;
+#if USE_MQTT
+WiFiClient mqttWiFiClient;
+PubSubClient mqttClient(mqttWiFiClient);
+#endif
 
 unsigned long lastSendAt = 0;
 const unsigned long SEND_INTERVAL_MS = 300000; // 5 minutes
@@ -110,6 +125,10 @@ bool hasBlynkConfig() {
   return config.blynkEnabled == 1 && strlen(config.blynkToken) > 0;
 }
 
+bool hasMqttConfig() {
+  return config.mqttEnabled == 1 && strlen(config.mqttHost) > 0 && strlen(config.mqttTopic) > 0;
+}
+
 bool isPrintableAscii(const char* value, size_t size) {
   for (size_t i = 0; i < size && value[i] != '\0'; i++) {
     if (value[i] < 32 || value[i] > 126) return false;
@@ -127,6 +146,12 @@ void loadConfig() {
     copyField(config.deviceKey, sizeof(config.deviceKey), "");
     copyField(config.blynkToken, sizeof(config.blynkToken), "");
     config.blynkEnabled = 0;
+    copyField(config.mqttHost, sizeof(config.mqttHost), "iot.phoubon.in.th");
+    config.mqttPort = 1883;
+    copyField(config.mqttUsername, sizeof(config.mqttUsername), "sterile_iot");
+    copyField(config.mqttPassword, sizeof(config.mqttPassword), "");
+    copyField(config.mqttTopic, sizeof(config.mqttTopic), "hospitals/default/rooms/default/devices/ESP-STERILE-ROOM-01/readings");
+    config.mqttEnabled = 0;
     copyField(config.serverUrl, sizeof(config.serverUrl), "http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io/api/readings");
     saveConfig();
     return;
@@ -149,6 +174,18 @@ void loadConfig() {
     config.blynkEnabled = 0;
     saveConfig();
   }
+  if (!isPrintableAscii(config.mqttHost, sizeof(config.mqttHost))) copyField(config.mqttHost, sizeof(config.mqttHost), "");
+  if (!isPrintableAscii(config.mqttUsername, sizeof(config.mqttUsername))) copyField(config.mqttUsername, sizeof(config.mqttUsername), "");
+  if (!isPrintableAscii(config.mqttPassword, sizeof(config.mqttPassword))) copyField(config.mqttPassword, sizeof(config.mqttPassword), "");
+  if (!isPrintableAscii(config.mqttTopic, sizeof(config.mqttTopic))) copyField(config.mqttTopic, sizeof(config.mqttTopic), "");
+  if (strlen(config.mqttHost) == 0) copyField(config.mqttHost, sizeof(config.mqttHost), "iot.phoubon.in.th");
+  if (strlen(config.mqttUsername) == 0) copyField(config.mqttUsername, sizeof(config.mqttUsername), "sterile_iot");
+  if (strlen(config.mqttTopic) == 0) {
+    String defaultTopic = String("hospitals/default/rooms/default/devices/") + String(config.deviceId) + "/readings";
+    copyField(config.mqttTopic, sizeof(config.mqttTopic), defaultTopic);
+  }
+  if (config.mqttPort == 0 || config.mqttPort > 65535) config.mqttPort = 1883;
+  if (config.mqttEnabled != 0 && config.mqttEnabled != 1) config.mqttEnabled = 0;
 }
 
 void saveConfig() {
@@ -180,6 +217,14 @@ String configPage(String message = "") {
   page += " style='width:auto;margin-right:8px'>Enable Blynk IoT</label>";
   page += "<label>Blynk Auth Token</label><input name='blynkToken' value='" + htmlEscape(config.blynkToken) + "' placeholder='from Blynk device info'>";
   page += "<p>Virtual Pins: V0 = Temp C, V1 = RH %, V2 = status</p>";
+  page += "<label><input name='mqttEnabled' type='checkbox' value='1'";
+  if (config.mqttEnabled == 1) page += " checked";
+  page += " style='width:auto;margin-right:8px'>Enable MQTT</label>";
+  page += "<label>MQTT Host</label><input name='mqttHost' value='" + htmlEscape(config.mqttHost) + "' placeholder='iot.phoubon.in.th'>";
+  page += "<label>MQTT Port</label><input name='mqttPort' type='number' value='" + String(config.mqttPort ? config.mqttPort : 1883) + "'>";
+  page += "<label>MQTT Username</label><input name='mqttUsername' value='" + htmlEscape(config.mqttUsername) + "' placeholder='sterile_iot'>";
+  page += "<label>MQTT Password</label><input name='mqttPassword' type='password' value='" + htmlEscape(config.mqttPassword) + "'>";
+  page += "<label>MQTT Topic</label><input name='mqttTopic' value='" + htmlEscape(config.mqttTopic) + "' placeholder='hospitals/.../readings'>";
   page += "<button type='submit'>Save & Restart</button></form>";
   page += "<p>Current ESP IP: " + WiFi.localIP().toString() + "</p>";
   page += "</body></html>";
@@ -198,6 +243,13 @@ void handleSave() {
   copyField(config.deviceKey, sizeof(config.deviceKey), webServer.arg("deviceKey"));
   copyField(config.blynkToken, sizeof(config.blynkToken), webServer.arg("blynkToken"));
   config.blynkEnabled = webServer.hasArg("blynkEnabled") ? 1 : 0;
+  copyField(config.mqttHost, sizeof(config.mqttHost), webServer.arg("mqttHost"));
+  config.mqttPort = webServer.arg("mqttPort").toInt();
+  if (config.mqttPort == 0) config.mqttPort = 1883;
+  copyField(config.mqttUsername, sizeof(config.mqttUsername), webServer.arg("mqttUsername"));
+  copyField(config.mqttPassword, sizeof(config.mqttPassword), webServer.arg("mqttPassword"));
+  copyField(config.mqttTopic, sizeof(config.mqttTopic), webServer.arg("mqttTopic"));
+  config.mqttEnabled = webServer.hasArg("mqttEnabled") ? 1 : 0;
   saveConfig();
   webServer.send(200, "text/html; charset=utf-8", configPage("Saved. ESP will restart now."));
   delay(1000);
@@ -333,6 +385,58 @@ void sendBlynkReading(float temperature, float humidity) {
 #endif
 }
 
+void connectMqtt() {
+#if USE_MQTT
+  if (!hasMqttConfig() || WiFi.status() != WL_CONNECTED) return;
+  mqttClient.setServer(config.mqttHost, config.mqttPort);
+  if (mqttClient.connected()) return;
+
+  String clientId = "sterile-esp-" + String(ESP.getChipId(), HEX);
+  Serial.print("MQTT connecting to ");
+  Serial.print(config.mqttHost);
+  Serial.print(":");
+  Serial.println(config.mqttPort);
+  bool connected = strlen(config.mqttUsername) > 0
+    ? mqttClient.connect(clientId.c_str(), config.mqttUsername, config.mqttPassword)
+    : mqttClient.connect(clientId.c_str());
+  if (connected) {
+    Serial.println("MQTT connected");
+  } else {
+    Serial.print("MQTT connect failed, state: ");
+    Serial.println(mqttClient.state());
+  }
+#else
+  if (hasMqttConfig()) {
+    Serial.println("MQTT config is set, but USE_MQTT is 0. Set USE_MQTT to 1 and install PubSubClient.");
+  }
+#endif
+}
+
+bool sendMqttReading(float temperature, float humidity) {
+#if USE_MQTT
+  if (!hasMqttConfig() || WiFi.status() != WL_CONNECTED) return false;
+  connectMqtt();
+  if (!mqttClient.connected()) {
+    Serial.println("MQTT not connected. Skip MQTT publish.");
+    return false;
+  }
+
+  String payload = "{";
+  payload += "\"deviceId\":\"" + String(config.deviceId) + "\",";
+  payload += "\"deviceKey\":\"" + String(config.deviceKey) + "\",";
+  payload += "\"temperature\":" + String(temperature, 1) + ",";
+  payload += "\"humidity\":" + String(humidity, 1);
+  payload += "}";
+
+  bool ok = mqttClient.publish(config.mqttTopic, payload.c_str(), false);
+  Serial.print("MQTT publish: ");
+  Serial.println(ok ? "ok" : "failed");
+  return ok;
+#else
+  return false;
+#endif
+}
+
 void sendReadingNow() {
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
@@ -351,7 +455,8 @@ void sendReadingNow() {
 
   if (WiFi.status() == WL_CONNECTED) {
     showReading(temperature, humidity);
-    int statusCode = postReading(temperature, humidity);
+    bool mqttSent = sendMqttReading(temperature, humidity);
+    int statusCode = mqttSent ? 200 : postReading(temperature, humidity);
     sendBlynkReading(temperature, humidity);
     if (statusCode == 201 || statusCode == 200) {
       showReading(temperature, humidity);
@@ -384,6 +489,7 @@ void setup() {
     Serial.print("Config page: http://");
     Serial.println(WiFi.localIP());
     connectBlynk();
+    connectMqtt();
     sendReadingNow();
     lastSendAt = millis();
   } else {
@@ -396,6 +502,12 @@ void loop() {
 #if USE_BLYNK
   if (WiFi.status() == WL_CONNECTED && hasBlynkConfig()) {
     Blynk.run();
+  }
+#endif
+#if USE_MQTT
+  if (WiFi.status() == WL_CONNECTED && hasMqttConfig()) {
+    if (!mqttClient.connected()) connectMqtt();
+    mqttClient.loop();
   }
 #endif
 

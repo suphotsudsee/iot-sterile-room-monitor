@@ -8,5 +8,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "mqtt": "^5.15.1"
   }
 }
