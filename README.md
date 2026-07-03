@@ -304,3 +304,54 @@ V2 = Status
 ```
 
 ถ้าไม่ได้ใช้ Blynk ให้คง `USE_BLYNK 0` ไว้ โค้ดจะ compile ได้โดยไม่ต้องติดตั้ง Blynk library
+
+## MQTT Broker บน Coolify
+
+โปรเจกต์นี้มี Mosquitto MQTT broker ใน `docker-compose.yml` แล้ว
+
+### Environment Variables ใน Coolify
+
+ตั้งค่าใน Coolify > Environment Variables:
+
+```text
+MQTT_USERNAME=sterile_iot
+MQTT_PASSWORD=ตั้งรหัสผ่านใหม่ที่เดายาก
+```
+
+อย่าใช้ค่า default `change-this-mqtt-password` ใน production
+
+### Ports
+
+ต้องเปิด port ที่ server/firewall:
+
+```text
+1883 = MQTT สำหรับ ESP
+9001 = MQTT over WebSocket สำหรับ browser/tool อื่น
+```
+
+### MQTT Connection
+
+```text
+Host: iot.phoubon.in.th
+Port: 1883
+Username: sterile_iot
+Password: ค่าจาก MQTT_PASSWORD
+```
+
+### Topic ที่แนะนำ
+
+```text
+hospitals/{hospitalId}/rooms/{roomId}/devices/{deviceId}/readings
+```
+
+ตัวอย่าง payload:
+
+```json
+{
+  "deviceKey": "dev_xxx",
+  "temperature": 24.1,
+  "humidity": 41.8
+}
+```
+
+ขั้นต่อไปคือเพิ่ม MQTT subscriber ใน `server.js` และเพิ่ม MQTT publish ใน ESP เพื่อให้ข้อมูลเข้า database ผ่าน MQTT ได้

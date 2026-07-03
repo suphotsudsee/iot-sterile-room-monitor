@@ -16,5 +16,24 @@ services:
       - sterile-room-monitor-data:/app/data
     restart: unless-stopped
 
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    environment:
+      MQTT_USERNAME: ${MQTT_USERNAME:-sterile_iot}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-this-mqtt-password}
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - sterile-room-mqtt-data:/mosquitto/data
+      - sterile-room-mqtt-log:/mosquitto/log
+    command: >
+      sh -c "mosquitto_passwd -b -c /mosquitto/data/password_file \"$${MQTT_USERNAME}\" \"$${MQTT_PASSWORD}\" &&
+      mosquitto -c /mosquitto/config/mosquitto.conf"
+    restart: unless-stopped
+
 volumes:
   sterile-room-monitor-data:
+  sterile-room-mqtt-data:
+  sterile-room-mqtt-log:
