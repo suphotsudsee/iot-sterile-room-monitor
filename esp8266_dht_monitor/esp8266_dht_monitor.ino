@@ -8,14 +8,24 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+#define USE_BLYNK 0
+#define BLYNK_PRINT Serial
+#if USE_BLYNK
+#include <BlynkSimpleEsp8266.h>
+#endif
+
 #define DHT_PIN D2
 #define DHT_TYPE DHT22
 #define LCD_SDA_PIN D5
 #define LCD_SCL_PIN D6
 #define LCD_ADDRESS 0x27
 
-#define EEPROM_SIZE 768
+#define EEPROM_SIZE 1024
 #define CONFIG_MAGIC 0x53484D32
+
+#define BLYNK_TEMP_VPIN 0
+#define BLYNK_RH_VPIN 1
+#define BLYNK_STATUS_VPIN 2
 
 struct DeviceConfig {
   uint32_t magic;
@@ -24,6 +34,8 @@ struct DeviceConfig {
   char serverUrl[180];
   char deviceId[48];
   char deviceKey[64];
+  char blynkToken[80];
+  uint8_t blynkEnabled;
 };
 
 DHT dht(DHT_PIN, DHT_TYPE);
@@ -94,6 +106,10 @@ bool hasConfig() {
   return config.magic == CONFIG_MAGIC && strlen(config.wifiName) > 0 && strlen(config.serverUrl) > 0;
 }
 
+bool hasBlynkConfig() {
+  return config.blynkEnabled == 1 && strlen(config.blynkToken) > 0;
+}
+
 bool isPrintableAscii(const char* value, size_t size) {
   for (size_t i = 0; i < size && value[i] != '\0'; i++) {
     if (value[i] < 32 || value[i] > 126) return false;
@@ -109,6 +125,8 @@ void loadConfig() {
     config.magic = CONFIG_MAGIC;
     copyField(config.deviceId, sizeof(config.deviceId), "ESP-STERILE-ROOM-01");
     copyField(config.deviceKey, sizeof(config.deviceKey), "");
+    copyField(config.blynkToken, sizeof(config.blynkToken), "");
+    config.blynkEnabled = 0;
     copyField(config.serverUrl, sizeof(config.serverUrl), "http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io/api/readings");
     saveConfig();
     return;
@@ -120,6 +138,15 @@ void loadConfig() {
   if (!isPrintableAscii(config.deviceId, sizeof(config.deviceId))) copyField(config.deviceId, sizeof(config.deviceId), "ESP-STERILE-ROOM-01");
   if (!isPrintableAscii(config.deviceKey, sizeof(config.deviceKey))) {
     copyField(config.deviceKey, sizeof(config.deviceKey), "");
+    saveConfig();
+  }
+  if (!isPrintableAscii(config.blynkToken, sizeof(config.blynkToken))) {
+    copyField(config.blynkToken, sizeof(config.blynkToken), "");
+    config.blynkEnabled = 0;
+    saveConfig();
+  }
+  if (config.blynkEnabled != 0 && config.blynkEnabled != 1) {
+    config.blynkEnabled = 0;
     saveConfig();
   }
 }
@@ -148,6 +175,11 @@ String configPage(String message = "") {
   page += "<label>Server URL</label><input name='serverUrl' value='" + htmlEscape(config.serverUrl) + "' required>";
   page += "<label>Device ID</label><input name='deviceId' value='" + htmlEscape(config.deviceId) + "' required>";
   page += "<label>Device Key</label><input name='deviceKey' value='" + htmlEscape(config.deviceKey) + "' placeholder='copy from web dashboard'>";
+  page += "<label><input name='blynkEnabled' type='checkbox' value='1'";
+  if (config.blynkEnabled == 1) page += " checked";
+  page += " style='width:auto;margin-right:8px'>Enable Blynk IoT</label>";
+  page += "<label>Blynk Auth Token</label><input name='blynkToken' value='" + htmlEscape(config.blynkToken) + "' placeholder='from Blynk device info'>";
+  page += "<p>Virtual Pins: V0 = Temp C, V1 = RH %, V2 = status</p>";
   page += "<button type='submit'>Save & Restart</button></form>";
   page += "<p>Current ESP IP: " + WiFi.localIP().toString() + "</p>";
   page += "</body></html>";
@@ -164,6 +196,8 @@ void handleSave() {
   copyField(config.serverUrl, sizeof(config.serverUrl), webServer.arg("serverUrl"));
   copyField(config.deviceId, sizeof(config.deviceId), webServer.arg("deviceId"));
   copyField(config.deviceKey, sizeof(config.deviceKey), webServer.arg("deviceKey"));
+  copyField(config.blynkToken, sizeof(config.blynkToken), webServer.arg("blynkToken"));
+  config.blynkEnabled = webServer.hasArg("blynkEnabled") ? 1 : 0;
   saveConfig();
   webServer.send(200, "text/html; charset=utf-8", configPage("Saved. ESP will restart now."));
   delay(1000);
@@ -227,6 +261,15 @@ int postReading(float temperature, float humidity) {
 
   String url = String(config.serverUrl);
   bool https = url.startsWith("https://");
+  String keyText = String(config.deviceKey);
+
+  Serial.print("POST URL: ");
+  Serial.println(url);
+  Serial.print("Device ID: ");
+  Serial.println(config.deviceId);
+  Serial.print("Device Key: ");
+  Serial.print(keyText.substring(0, 8));
+  Serial.println(keyText.length() > 8 ? "..." : "");
 
   if (https) {
     secureClient.reset(new BearSSL::WiFiClientSecure);
@@ -248,9 +291,46 @@ int postReading(float temperature, float humidity) {
   int statusCode = http.POST(body);
   Serial.print("POST status: ");
   Serial.println(statusCode);
+  if (statusCode < 0) {
+    Serial.print("POST error: ");
+    Serial.println(http.errorToString(statusCode));
+  }
   Serial.println(http.getString());
   http.end();
   return statusCode;
+}
+
+void connectBlynk() {
+#if USE_BLYNK
+  if (!hasBlynkConfig() || WiFi.status() != WL_CONNECTED) return;
+  Serial.println("Blynk config started");
+  Blynk.config(config.blynkToken);
+  if (Blynk.connect(5000)) {
+    Serial.println("Blynk connected");
+    Blynk.virtualWrite(BLYNK_STATUS_VPIN, "online");
+  } else {
+    Serial.println("Blynk connect failed");
+  }
+#else
+  if (hasBlynkConfig()) {
+    Serial.println("Blynk token is set, but USE_BLYNK is 0. Set USE_BLYNK to 1 and install Blynk library.");
+  }
+#endif
+}
+
+void sendBlynkReading(float temperature, float humidity) {
+#if USE_BLYNK
+  if (!hasBlynkConfig() || WiFi.status() != WL_CONNECTED) return;
+  if (!Blynk.connected()) Blynk.connect(3000);
+  if (!Blynk.connected()) {
+    Serial.println("Blynk not connected. Skip Blynk update.");
+    return;
+  }
+  Blynk.virtualWrite(BLYNK_TEMP_VPIN, temperature);
+  Blynk.virtualWrite(BLYNK_RH_VPIN, humidity);
+  Blynk.virtualWrite(BLYNK_STATUS_VPIN, "updated");
+  Serial.println("Blynk updated");
+#endif
 }
 
 void sendReadingNow() {
@@ -272,6 +352,7 @@ void sendReadingNow() {
   if (WiFi.status() == WL_CONNECTED) {
     showReading(temperature, humidity);
     int statusCode = postReading(temperature, humidity);
+    sendBlynkReading(temperature, humidity);
     if (statusCode == 201 || statusCode == 200) {
       showReading(temperature, humidity);
     } else {
@@ -302,6 +383,7 @@ void setup() {
     startConfigServer();
     Serial.print("Config page: http://");
     Serial.println(WiFi.localIP());
+    connectBlynk();
     sendReadingNow();
     lastSendAt = millis();
   } else {
@@ -311,6 +393,11 @@ void setup() {
 
 void loop() {
   webServer.handleClient();
+#if USE_BLYNK
+  if (WiFi.status() == WL_CONNECTED && hasBlynkConfig()) {
+    Blynk.run();
+  }
+#endif
 
   if (WiFi.status() == WL_CONNECTED && millis() - lastSendAt >= SEND_INTERVAL_MS) {
     lastSendAt = millis();
