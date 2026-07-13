@@ -629,13 +629,16 @@ $("#deviceForm").addEventListener("submit", async event => {
         hospitalId: selectedHospitalId(),
         roomId,
         name: form.get("name"),
-        deviceId: form.get("deviceId")
+        deviceId: form.get("deviceId"),
+        deviceKey: form.get("deviceKey")
       })
     });
     formElement.reset();
     await refreshAll();
     $("#deviceRoomSelect").value = roomId;
-    message.textContent = `สร้าง Device Key แล้ว: ${result.device.deviceKey}`;
+    message.textContent = result.importedDeviceKey
+      ? `เพิ่ม ESP โดยใช้ Device Key เดิมแล้ว: ${result.device.deviceKey}`
+      : `เพิ่ม ESP และสร้าง Device Key แล้ว: ${result.device.deviceKey}`;
     message.className = "form-message success";
   } catch (error) {
     message.textContent = error.message;

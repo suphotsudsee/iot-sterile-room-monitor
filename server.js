@@ -854,19 +854,30 @@ async function handleApi(req, res, url) {
     return withDb(db => {
       const room = db.rooms.find(item => item.id === payload.roomId && item.hospitalId === payload.hospitalId);
       if (!room) return json(res, 400, { error: "Room not found" });
+      const suppliedDeviceKey = String(payload.deviceKey || "").trim();
+      const suppliedDeviceId = String(payload.deviceId || payload.name || "").trim();
+      if (suppliedDeviceKey && !/^dev_[A-Za-z0-9_-]{8,}$/.test(suppliedDeviceKey)) {
+        return json(res, 400, { error: "Device Key เดิมไม่ถูกต้อง ต้องขึ้นต้นด้วย dev_ และมีอย่างน้อย 8 ตัวอักษรหลัง dev_" });
+      }
+      if (db.devices.some(item => item.deviceId === suppliedDeviceId)) {
+        return json(res, 409, { error: "Device ID นี้มีอยู่ในระบบแล้ว" });
+      }
+      if (suppliedDeviceKey && db.devices.some(item => item.deviceKey === suppliedDeviceKey)) {
+        return json(res, 409, { error: "Device Key นี้มีอยู่ในระบบแล้ว" });
+      }
       const device = {
         id: id("dev"),
         hospitalId: String(payload.hospitalId),
         roomId: String(payload.roomId),
         name: String(payload.name || "").trim(),
-        deviceId: String(payload.deviceId || payload.name || "").trim(),
-        deviceKey: deviceKey(),
+        deviceId: suppliedDeviceId,
+        deviceKey: suppliedDeviceKey || deviceKey(),
         lastSeenAt: null,
         createdAt: nowIso()
       };
       if (!device.name) return json(res, 400, { error: "Device name is required" });
       db.devices.push(device);
-      return json(res, 201, { device });
+      return json(res, 201, { device, importedDeviceKey: Boolean(suppliedDeviceKey) });
     });
   }
 
