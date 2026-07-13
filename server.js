@@ -133,7 +133,12 @@ async function loadDb() {
       if (reading && room) alert.level = alertLevel(reading, room);
     }
     return db;
-  } catch {
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error(`Database file exists but cannot be loaded: ${DB_FILE}`);
+      throw error;
+    }
+    console.warn(`Database file not found. Creating a new database at ${DB_FILE}`);
     const hospitalId = id("hosp");
     const roomId = id("room");
     const key = deviceKey();
@@ -607,7 +612,16 @@ async function handleAuth(req, res, url) {
 
 async function handleApi(req, res, url) {
   if (req.method === "OPTIONS") return json(res, 204, {});
-  if (url.pathname === "/api/health") return json(res, 200, { ok: true, service: "iot-sterile-room-monitor-saas" });
+  if (url.pathname === "/api/health") {
+    const dbFileExists = await fs.stat(DB_FILE).then(stat => stat.isFile()).catch(() => false);
+    return json(res, 200, {
+      ok: true,
+      service: "iot-sterile-room-monitor-saas",
+      dataDir: DATA_DIR,
+      dbFile: DB_FILE,
+      dbFileExists
+    });
+  }
 
   const authResult = await handleAuth(req, res, url);
   if (authResult !== false) return authResult;
@@ -1126,6 +1140,8 @@ loadDb()
     server.listen(PORT, () => {
       console.log(`Sterile room SaaS monitor running at http://localhost:${PORT}`);
       console.log(`Admin email: ${ADMIN_EMAIL}`);
+      console.log(`Data directory: ${DATA_DIR}`);
+      console.log(`Database file: ${DB_FILE}`);
       startMqttSubscriber();
     });
   })

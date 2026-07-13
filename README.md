@@ -388,3 +388,37 @@ MQTT Topic = hospitals/{hospitalId}/rooms/{roomId}/devices/{deviceId}/readings
 ```
 
 เมื่อเปิด MQTT แล้ว ESP จะใช้ MQTT เป็นทางหลัก ถ้า MQTT ส่งไม่สำเร็จจะ fallback ไป HTTP เดิม เพื่อไม่ให้ข้อมูลในรายงานซ้ำ
+
+## กันข้อมูลหายหลัง restart/redeploy บน Coolify
+
+ระบบเก็บข้อมูลไว้ที่ไฟล์:
+
+```text
+/app/data/saas-db.json
+```
+
+ถ้า deploy แบบ Dockerfile ใน Coolify ต้องเพิ่ม Storage เอง:
+
+```text
+Type: Volume Mount
+Source: sterile-room-monitor-data
+Destination: /app/data
+```
+
+ถ้าไม่ได้ mount `/app/data` ข้อมูลจะอยู่ใน container ชั่วคราว และจะหายเมื่อ container ถูก recreate/redeploy
+
+ตรวจสอบ path ที่ระบบใช้อยู่ได้ที่:
+
+```text
+https://iot.phoubon.in.th/api/health
+```
+
+ค่าที่ถูกต้องควรเห็นประมาณนี้:
+
+```json
+{
+  "dataDir": "/app/data",
+  "dbFile": "/app/data/saas-db.json",
+  "dbFileExists": true
+}
+```
