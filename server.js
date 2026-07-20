@@ -203,17 +203,9 @@ async function loadDb() {
   }
 }
 
-// --- เป็นแบบใหม่ที่ปลอดภัยกว่า (Atomic Write) ---
 async function saveDb(db) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  const tempFile = `${DB_FILE}.tmp`; // สร้างไฟล์ชั่วคราว
-  
-  // เขียนข้อมูลลงไฟล์ชั่วคราวให้เสร็จก่อน
-  await fs.writeFile(tempFile, JSON.stringify(db, null, 2), "utf8");
-  
-  // ใช้ rename เพื่อเปลี่ยนชื่อไฟล์ชั่วคราวให้เป็นไฟล์หลัก 
-  // ซึ่งเป็น Operation ที่ปลอดภัยกว่าในระดับระบบปฏิบัติการ
-  await fs.rename(tempFile, DB_FILE); 
+  await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), "utf8");
 }
 
 async function backupDb(db, reason) {
