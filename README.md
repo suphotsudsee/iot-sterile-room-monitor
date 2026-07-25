@@ -395,11 +395,16 @@ MQTT Topic = hospitals/{hospitalId}/rooms/{roomId}/devices/{deviceId}/readings
 
 ## กันข้อมูลหายหลัง restart/redeploy บน Coolify
 
-ระบบเก็บข้อมูลไว้ที่ไฟล์:
+ระบบใช้ SQLite และเก็บฐานข้อมูลไว้ที่:
 
 ```text
-/app/data/saas-db.json
+/app/data/saas.db
 ```
+
+เมื่อ deploy เวอร์ชันนี้ครั้งแรก ถ้ามีไฟล์เดิม `/app/data/saas-db.json` ระบบจะนำข้อมูล
+โรงพยาบาล ห้อง อุปกรณ์ ผู้ใช้ readings และ alerts เข้า SQLite ให้อัตโนมัติ หากไฟล์ JSON
+เคยถูกเขียนต่อกันจนเปิดไม่ได้ ระบบจะกู้จาก JSON ก้อนล่าสุดที่สมบูรณ์ก่อนนำเข้า ไฟล์เดิมจะ
+ยังคงอยู่เพื่อใช้เป็นสำเนาสำรองและจะไม่ถูกลบ
 
 ถ้า deploy แบบ Dockerfile ใน Coolify ต้องเพิ่ม Storage เอง:
 
@@ -421,8 +426,15 @@ https://iot.phoubon.in.th/api/health
 
 ```json
 {
+  "storage": "sqlite",
   "dataDir": "/app/data",
-  "dbFile": "/app/data/saas-db.json",
+  "dbFile": "/app/data/saas.db",
   "dbFileExists": true
 }
 ```
+
+หลังย้ายข้อมูลสำเร็จ Logs ของ Coolify จะแสดง `SQLite initialized from: legacy-json`
+ครั้งแรก และแสดง `SQLite initialized from: sqlite` ในการเปิดระบบครั้งถัดไป
+
+ก่อนสำรองฐานข้อมูลด้วยการคัดลอกไฟล์ ให้หยุด application ชั่วคราว แล้วสำรองไฟล์
+`/app/data/saas.db` จาก Volume เพื่อให้ได้ข้อมูลครบทั้ง transaction

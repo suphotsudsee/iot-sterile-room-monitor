@@ -4,10 +4,11 @@
   "private": true,
   "description": "Temperature and relative humidity monitoring dashboard for sterile storage room IoT data.",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.5.0"
   },
   "dependencies": {
     "mqtt": "^5.15.1"

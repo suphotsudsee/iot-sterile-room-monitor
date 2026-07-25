@@ -6,6 +6,7 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 COPY server.js ./
+COPY sqlite-store.js ./
 COPY public ./public
 
 ENV NODE_ENV=production

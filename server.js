@@ -3,12 +3,14 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const mqtt = require("mqtt");
+const { SqliteStore } = require("./sqlite-store");
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, "data");
-const DB_FILE = path.join(DATA_DIR, "saas-db.json");
+const DB_FILE = path.join(DATA_DIR, "saas.db");
+const LEGACY_DB_FILE = path.join(DATA_DIR, "saas-db.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@phoubon.in.th";
@@ -36,6 +38,12 @@ const MIME = {
 };
 
 const sessions = new Map();
+const store = new SqliteStore({
+  dataDir: DATA_DIR,
+  sqliteFile: DB_FILE,
+  legacyFile: LEGACY_DB_FILE
+});
+let writeQueue = Promise.resolve();
 
 function id(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString("hex")}`;
@@ -121,91 +129,81 @@ function cleanSessionUser(user) {
   };
 }
 
+function createDefaultDatabase() {
+  const hospitalId = id("hosp");
+  const roomId = id("room");
+  const key = deviceKey();
+  console.log(`Default admin email: ${ADMIN_EMAIL}`);
+  console.log(`Demo device key: ${key}`);
+  return {
+    hospitals: [
+      {
+        id: hospitalId,
+        name: "โรงพยาบาลตัวอย่าง",
+        code: "DEMO-HOSPITAL",
+        alertWebhookUrl: "",
+        alertWebhookToken: "",
+        lineChannelAccessToken: "",
+        lineTo: "",
+        alertCooldownMinutes: 30,
+        createdAt: nowIso()
+      }
+    ],
+    rooms: [
+      {
+        id: roomId,
+        hospitalId,
+        name: "ห้องเก็บเครื่องมือปราศจากเชื้อ",
+        tempMin: 20,
+        tempMax: 24,
+        rhMin: 30,
+        rhMax: 60,
+        createdAt: nowIso()
+      }
+    ],
+    devices: [
+      {
+        id: id("dev"),
+        hospitalId,
+        roomId,
+        name: "ESP-STERILE-ROOM-01",
+        deviceId: "ESP-STERILE-ROOM-01",
+        deviceKey: key,
+        lastSeenAt: null,
+        createdAt: nowIso()
+      }
+    ],
+    readings: [],
+    alerts: [],
+    lineWebhookEvents: [],
+    users: [
+      {
+        id: id("usr"),
+        hospitalId: null,
+        name: "System Admin",
+        email: ADMIN_EMAIL,
+        passwordHash: hashPassword(ADMIN_PASSWORD),
+        role: "system_admin",
+        createdAt: nowIso()
+      }
+    ],
+    auditLogs: []
+  };
+}
+
 async function loadDb() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    const raw = await fs.readFile(DB_FILE, "utf8");
-    const db = JSON.parse(raw);
-    db.lineWebhookEvents = Array.isArray(db.lineWebhookEvents) ? db.lineWebhookEvents : [];
-    for (const alert of db.alerts || []) {
-      const reading = (db.readings || []).find(item => item.id === alert.readingId);
-      const room = (db.rooms || []).find(item => item.id === alert.roomId);
-      if (reading && room) alert.level = alertLevel(reading, room);
-    }
-    return db;
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      console.error(`Database file exists but cannot be loaded: ${DB_FILE}`);
-      throw error;
-    }
-    console.warn(`Database file not found. Creating a new database at ${DB_FILE}`);
-    const hospitalId = id("hosp");
-    const roomId = id("room");
-    const key = deviceKey();
-    const db = {
-      hospitals: [
-        {
-          id: hospitalId,
-          name: "โรงพยาบาลตัวอย่าง",
-          code: "DEMO-HOSPITAL",
-          alertWebhookUrl: "",
-          alertWebhookToken: "",
-          lineChannelAccessToken: "",
-          lineTo: "",
-          alertCooldownMinutes: 30,
-          createdAt: nowIso()
-        }
-      ],
-      rooms: [
-        {
-          id: roomId,
-          hospitalId,
-          name: "ห้องเก็บเครื่องมือปราศจากเชื้อ",
-          tempMin: 20,
-          tempMax: 24,
-          rhMin: 30,
-          rhMax: 60,
-          createdAt: nowIso()
-        }
-      ],
-      devices: [
-        {
-          id: id("dev"),
-          hospitalId,
-          roomId,
-          name: "ESP-STERILE-ROOM-01",
-          deviceId: "ESP-STERILE-ROOM-01",
-          deviceKey: key,
-          lastSeenAt: null,
-          createdAt: nowIso()
-        }
-      ],
-      readings: [],
-      alerts: [],
-      lineWebhookEvents: [],
-      users: [
-        {
-          id: id("usr"),
-          hospitalId: null,
-          name: "System Admin",
-          email: ADMIN_EMAIL,
-          passwordHash: hashPassword(ADMIN_PASSWORD),
-          role: "system_admin",
-          createdAt: nowIso()
-        }
-      ],
-      auditLogs: []
-    };
-    await saveDb(db);
-    console.log(`Default admin email: ${ADMIN_EMAIL}`);
-    console.log(`Demo device key: ${key}`);
-    return db;
+  const db = store.load();
+  db.lineWebhookEvents = Array.isArray(db.lineWebhookEvents) ? db.lineWebhookEvents : [];
+  for (const alert of db.alerts || []) {
+    const reading = (db.readings || []).find(item => item.id === alert.readingId);
+    const room = (db.rooms || []).find(item => item.id === alert.roomId);
+    if (reading && room) alert.level = alertLevel(reading, room);
   }
+  return db;
 }
 
 async function saveDb(db) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), "utf8");
+  store.save(db);
 }
 
 async function backupDb(db, reason) {
@@ -217,10 +215,14 @@ async function backupDb(db, reason) {
 }
 
 async function withDb(fn) {
-  const db = await loadDb();
-  const result = await fn(db);
-  await saveDb(db);
-  return result;
+  const operation = writeQueue.then(async () => {
+    const db = await loadDb();
+    const result = await fn(db);
+    await saveDb(db);
+    return result;
+  });
+  writeQueue = operation.catch(() => {});
+  return operation;
 }
 
 async function recordReading(payload, source = "http") {
@@ -617,6 +619,7 @@ async function handleApi(req, res, url) {
     return json(res, 200, {
       ok: true,
       service: "iot-sterile-room-monitor-saas",
+      storage: "sqlite",
       dataDir: DATA_DIR,
       dbFile: DB_FILE,
       dbFileExists
@@ -1146,8 +1149,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-loadDb()
-  .then(() => {
+store.initialize(createDefaultDatabase)
+  .then(async result => {
+    const db = await loadDb();
+    console.log(`SQLite initialized from: ${result.source}`);
+    console.log(`Loaded ${db.hospitals.length} hospitals, ${db.devices.length} devices, ${db.readings.length} readings`);
     server.listen(PORT, () => {
       console.log(`Sterile room SaaS monitor running at http://localhost:${PORT}`);
       console.log(`Admin email: ${ADMIN_EMAIL}`);
@@ -1160,3 +1166,13 @@ loadDb()
     console.error(error);
     process.exit(1);
   });
+
+function shutdown() {
+  server.close(() => {
+    store.close();
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
