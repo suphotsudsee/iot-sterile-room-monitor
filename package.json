@@ -4,7 +4,7 @@
   "private": true,
   "description": "Temperature and relative humidity monitoring dashboard for sterile storage room IoT data.",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --disable-warning=ExperimentalWarning server.js",
     "test": "node --test"
   },
   "engines": {

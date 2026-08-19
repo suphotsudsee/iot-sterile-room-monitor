@@ -83,9 +83,15 @@ ADMIN_PASSWORD=ตั้งรหัสจริง
 APP_PUBLIC_URL=http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io
 MOPH_NOTIFY_BASE_URL=https://morpromt2f.moph.go.th
 ALERT_COOLDOWN_MINUTES=30
+MQTT_ENABLED=false
 ```
 
 9. Deploy
+
+การ deploy แบบ Dockerfile ไม่มี service ชื่อ `mqtt-broker` ให้ตั้ง `MQTT_ENABLED=false`
+จนกว่าจะสร้าง MQTT Broker เป็น Resource แยกและเปลี่ยน `MQTT_URL` เป็น hostname ของ Broker
+ที่ Application ติดต่อได้ ส่วน `docker-compose.yml` ของโครงการเปิด MQTT ไว้เพราะสร้าง Broker
+มาพร้อมกันอยู่แล้ว
 
 ## ระบบแจ้งเตือน MOPH Notify แยกตามโรงพยาบาล
 

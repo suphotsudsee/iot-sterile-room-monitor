@@ -22,7 +22,7 @@ const VALID_TEMP_MIN = Number(process.env.VALID_TEMP_MIN || 5);
 const VALID_TEMP_MAX = Number(process.env.VALID_TEMP_MAX || 50);
 const VALID_RH_MIN = Number(process.env.VALID_RH_MIN || 1);
 const VALID_RH_MAX = Number(process.env.VALID_RH_MAX || 100);
-const MQTT_ENABLED = String(process.env.MQTT_ENABLED || "true").toLowerCase() !== "false";
+const MQTT_ENABLED = String(process.env.MQTT_ENABLED || "false").toLowerCase() === "true";
 const MQTT_URL = process.env.MQTT_URL || "mqtt://mqtt-broker:1883";
 const MQTT_USERNAME = process.env.MQTT_USERNAME || "sterile_iot";
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || "change-this-mqtt-password";
@@ -1133,10 +1133,12 @@ function startMqttSubscriber() {
     return;
   }
 
+  let lastErrorMessage = "";
+  let lastErrorAt = 0;
   const client = mqtt.connect(MQTT_URL, {
     username: MQTT_USERNAME,
     password: MQTT_PASSWORD,
-    reconnectPeriod: 5000,
+    reconnectPeriod: 30000,
     connectTimeout: 10000,
     clientId: `sterile-room-server-${crypto.randomBytes(4).toString("hex")}`
   });
@@ -1160,7 +1162,13 @@ function startMqttSubscriber() {
   });
 
   client.on("error", error => {
-    console.error("MQTT error:", error.message || error);
+    const message = error.message || String(error);
+    const now = Date.now();
+    if (message !== lastErrorMessage || now - lastErrorAt >= 300000) {
+      console.error("MQTT error:", message);
+      lastErrorMessage = message;
+      lastErrorAt = now;
+    }
   });
 }
 
