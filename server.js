@@ -563,10 +563,7 @@ async function sendMophNotify(payload, config) {
         "secret-key": config.mophNotifySecretKey
       },
       body: JSON.stringify({
-        messages: [
-          { type: "text", text },
-          message
-        ]
+        messages: [message]
       })
     });
   } catch (error) {
