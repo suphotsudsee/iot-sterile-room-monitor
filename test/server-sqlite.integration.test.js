@@ -157,7 +157,9 @@ test("MOPH Notify uses the documented endpoint, headers, and messages body", asy
     assert.equal(received.headers["secret-key"], "secret-key-test");
     assert.equal(received.headers["content-type"], "application/json");
     assert.equal(Array.isArray(received.body.messages), true);
-    assert.equal(received.body.messages[0].type, "flex");
+    assert.equal(received.body.messages[0].type, "text");
+    assert.match(received.body.messages[0].text, /Temp: 29\.1 °C/);
+    assert.equal(received.body.messages[1].type, "flex");
     assert.equal("to" in received.body, false);
   } finally {
     await stopServer(running.child);

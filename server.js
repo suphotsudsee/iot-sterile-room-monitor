@@ -561,14 +561,32 @@ async function sendMophNotify(payload, config) {
       "secret-key": config.mophNotifySecretKey
     },
     body: JSON.stringify({
-      messages: [message]
+      messages: [
+        { type: "text", text },
+        message
+      ]
     })
   });
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`MOPH Notify failed: ${response.status} ${body}`.trim());
+  const responseText = await response.text().catch(() => "");
+  let responseBody = responseText;
+  try {
+    responseBody = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    // Keep a non-JSON response as text for diagnostics.
   }
-  return { ok: true, channel: "moph-notify" };
+  if (!response.ok) {
+    throw new Error(`MOPH Notify failed: ${response.status} ${responseText}`.trim());
+  }
+  const downstreamCode = Number(responseBody?.message_code ?? responseBody?.statusCode ?? responseBody?.status);
+  if (responseBody?.success === false || (Number.isFinite(downstreamCode) && downstreamCode >= 400)) {
+    throw new Error(`MOPH Notify rejected: ${responseText || downstreamCode}`);
+  }
+  return {
+    ok: true,
+    channel: "moph-notify",
+    status: response.status,
+    response: responseBody
+  };
 }
 
 async function handleAuth(req, res, url) {
@@ -1050,8 +1068,8 @@ async function handleApi(req, res, url) {
       level: "critical",
       message: "ทดสอบแจ้งเตือน Temp/RH ผิดเกณฑ์"
     };
-    await sendAlertNotification({ alert, reading, hospital, room, device, config: notificationConfig });
-    return json(res, 200, { ok: true });
+    const notification = await sendAlertNotification({ alert, reading, hospital, room, device, config: notificationConfig });
+    return json(res, 200, { ok: true, notification });
   }
 
   if (url.pathname === "/api/reports/monthly.csv" && req.method === "GET") {

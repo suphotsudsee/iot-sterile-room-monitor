@@ -754,26 +754,51 @@ $("#userForm").addEventListener("submit", async event => {
 $("#alertSettingsForm").addEventListener("submit", async event => {
   event.preventDefault();
   const formElement = event.currentTarget;
+  const message = $("#mophNotifyMessage");
   const form = new FormData(formElement);
-  await api("/api/hospitals/alert-settings", {
-    method: "POST",
-    body: JSON.stringify({
-      hospitalId: selectedHospitalId(),
-      mophNotifyBaseUrl: form.get("mophNotifyBaseUrl"),
-      mophNotifyClientKey: form.get("mophNotifyClientKey"),
-      mophNotifySecretKey: form.get("mophNotifySecretKey"),
-      alertCooldownMinutes: Number(form.get("alertCooldownMinutes"))
-    })
-  });
-  await refreshAll();
+  message.textContent = "กำลังบันทึก...";
+  message.className = "form-message";
+  try {
+    await api("/api/hospitals/alert-settings", {
+      method: "POST",
+      body: JSON.stringify({
+        hospitalId: selectedHospitalId(),
+        mophNotifyBaseUrl: form.get("mophNotifyBaseUrl"),
+        mophNotifyClientKey: form.get("mophNotifyClientKey"),
+        mophNotifySecretKey: form.get("mophNotifySecretKey"),
+        alertCooldownMinutes: Number(form.get("alertCooldownMinutes"))
+      })
+    });
+    await refreshAll();
+    message.textContent = "บันทึก MOPH Notify แล้ว";
+    message.className = "form-message success";
+  } catch (error) {
+    message.textContent = error.message;
+    message.className = "form-message error";
+  }
 });
 
 $("#testAlertButton").addEventListener("click", async () => {
-  await api(`/api/notifications/test?hospitalId=${encodeURIComponent(selectedHospitalId())}`, {
-    method: "POST",
-    body: "{}"
-  });
-  alert("ส่งทดสอบ MOPH Notify แล้ว");
+  const button = $("#testAlertButton");
+  const message = $("#mophNotifyMessage");
+  button.disabled = true;
+  message.textContent = "กำลังส่งทดสอบ...";
+  message.className = "form-message";
+  try {
+    const result = await api(`/api/notifications/test?hospitalId=${encodeURIComponent(selectedHospitalId())}`, {
+      method: "POST",
+      body: "{}"
+    });
+    const detail = result.notification?.response;
+    const detailText = detail ? `: ${typeof detail === "string" ? detail : JSON.stringify(detail)}` : "";
+    message.textContent = `MOPH Notify รับคำขอแล้ว (HTTP ${result.notification?.status || 200})${detailText}`;
+    message.className = "form-message success";
+  } catch (error) {
+    message.textContent = error.message;
+    message.className = "form-message error";
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $("#manualForm").addEventListener("submit", async event => {

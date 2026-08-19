@@ -107,11 +107,12 @@
             <form id="alertSettingsForm">
               <h3>MOPH Notify ของ รพ.</h3>
               <input name="mophNotifyBaseUrl" type="url" placeholder="MOPH Notify Base URL">
-              <input name="mophNotifyClientKey" autocomplete="off" placeholder="Client Key จาก CMS MOPH Notify">
-              <input name="mophNotifySecretKey" type="password" autocomplete="new-password" placeholder="Secret Key จาก CMS MOPH Notify">
+              <input name="mophNotifyClientKey" autocomplete="off" placeholder="Client ID จาก CMS (ใช้เป็น client-key)">
+              <input name="mophNotifySecretKey" type="password" autocomplete="new-password" placeholder="Secret จาก CMS (ใช้เป็น secret-key)">
               <input name="alertCooldownMinutes" type="number" min="0" step="1" value="30" placeholder="แจ้งซ้ำทุกกี่นาที">
               <button type="submit">บันทึก MOPH Notify</button>
               <button id="testAlertButton" class="secondary-button" type="button">ทดสอบ MOPH Notify</button>
+              <div id="mophNotifyMessage" class="form-message" role="status"></div>
             </form>
           </div>
           <div class="crud-grid">
