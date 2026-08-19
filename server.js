@@ -552,21 +552,30 @@ async function sendMophNotify(payload, config) {
   };
 
   const endpoint = `${String(config.mophNotifyBaseUrl || MOPH_NOTIFY_BASE_URL).replace(/\/+$/, "")}/api/notify/send`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    signal: AbortSignal.timeout(15_000),
-    headers: {
-      "content-type": "application/json",
-      "client-key": config.mophNotifyClientKey,
-      "secret-key": config.mophNotifySecretKey
-    },
-    body: JSON.stringify({
-      messages: [
-        { type: "text", text },
-        message
-      ]
-    })
-  });
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      signal: AbortSignal.timeout(15_000),
+      headers: {
+        "content-type": "application/json",
+        "client-key": config.mophNotifyClientKey,
+        "secret-key": config.mophNotifySecretKey
+      },
+      body: JSON.stringify({
+        messages: [
+          { type: "text", text },
+          message
+        ]
+      })
+    });
+  } catch (error) {
+    const code = error?.cause?.code || error?.code || "";
+    if (code === "UND_ERR_CONNECT_TIMEOUT" || error?.name === "TimeoutError") {
+      throw new Error(`เชื่อมต่อ MOPH Notify ไม่สำเร็จ: timeout ที่ ${endpoint} กรุณาตรวจ outbound TCP 443 หรือขอ MOPH whitelist IP ของเซิร์ฟเวอร์`);
+    }
+    throw new Error(`เชื่อมต่อ MOPH Notify ไม่สำเร็จ: ${code || error.message || "network error"}`);
+  }
   const responseText = await response.text().catch(() => "");
   let responseBody = responseText;
   try {
