@@ -11,7 +11,7 @@
 - สร้าง Device Key ให้ ESP
 - รับข้อมูลผ่าน `POST /api/readings`
 - แยกข้อมูลตามโรงพยาบาลและห้อง
-- แจ้งเตือนในเว็บและส่ง Webhook เมื่อ Temp/RH ผิดเกณฑ์
+- แจ้งเตือนในเว็บและส่ง MOPH Notify เมื่อ Temp/RH ผิดเกณฑ์
 - Export รายงานรายเดือนเป็น CSV
 - เก็บข้อมูลใน database file ที่ mount อยู่ใน `/app/data`
 
@@ -81,75 +81,53 @@ DATA_DIR=/app/data
 ADMIN_EMAIL=admin@phoubon.in.th
 ADMIN_PASSWORD=ตั้งรหัสจริง
 APP_PUBLIC_URL=http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io
-ALERT_WEBHOOK_URL=
-ALERT_WEBHOOK_TOKEN=
+MOPH_NOTIFY_BASE_URL=https://morpromt2f.moph.go.th
 ALERT_COOLDOWN_MINUTES=30
 ```
 
 9. Deploy
 
-## ระบบแจ้งเตือนแยกตามโรงพยาบาล
+## ระบบแจ้งเตือน MOPH Notify แยกตามโรงพยาบาล
 
-เมื่อ ESP ส่งค่าเข้ามาแล้ว Temp/RH ผิดเกณฑ์ ระบบจะ:
+เมื่อ Temp/RH ผิดเกณฑ์ ระบบจะบันทึก alert และส่ง Flex Message ผ่าน MOPH Notify ไปยัง
+LINE OA หมอพร้อมของโรงพยาบาลนั้น โดยไม่ต้องใช้ LINE Channel Access Token หรือ LINE ID
 
-1. บันทึก alert ในหน้าเว็บ
-2. ส่ง webhook ไปยัง URL ของโรงพยาบาลนั้น ถ้าตั้งค่าไว้
-
-ตั้งค่าในหน้าเว็บ:
-
-1. Login ด้วย `system_admin` หรือ `hospital_admin`
-2. เลือกโรงพยาบาล
-3. ไปที่ `แจ้งเตือนของ รพ.`
-4. ถ้าต้องการส่ง LINE โดยตรง ให้ใส่ `LINE Channel Access Token` และ `LINE User ID หรือ Group ID`
-5. ถ้าต้องการส่งผ่านระบบอื่น ให้ใส่ `Webhook URL`, `Token` ถ้ามี
-6. ตั้ง cooldown แล้วกด `บันทึกแจ้งเตือน`
-7. กด `ทดสอบแจ้งเตือน` เพื่อตรวจว่าปลายทางรับข้อความได้
-
-ถ้าตั้ง LINE ครบ ระบบจะส่งผ่าน LINE ก่อน ถ้าไม่ได้ตั้ง LINE แต่มี Webhook URL ระบบจะส่ง webhook
-
-ค่าที่ต้องใช้สำหรับ LINE:
+ค่าที่ต้องกรอกในหน้า `MOPH Notify ของ รพ.`:
 
 ```text
-LINE Channel Access Token = token จาก LINE Developers Console > Messaging API
-LINE User ID หรือ Group ID = ปลายทางที่ต้องการให้ bot ส่งข้อความไป
+MOPH Notify Base URL = https://morpromt2f.moph.go.th
+Client Key = จากเมนูหน่วยบริการใน CMS MOPH Notify
+Secret Key = จากเมนูหน่วยบริการใน CMS MOPH Notify
+แจ้งซ้ำทุกกี่นาที = 30 (ปรับได้)
 ```
 
-LINE Messaging API ใช้ endpoint:
+ระบบเรียก API ตามเอกสาร:
 
 ```text
-https://api.line.me/v2/bot/message/push
+POST https://morpromt2f.moph.go.th/api/notify/send
+Content-Type: application/json
+client-key: CLIENT_KEY_ของโรงพยาบาล
+secret-key: SECRET_KEY_ของโรงพยาบาล
 ```
 
-โดยระบบจะส่งข้อความแบบ text message ไปยังค่า `LINE User ID หรือ Group ID`
-
-ค่าใน Coolify ด้านล่างเป็น fallback กลาง ถ้าโรงพยาบาลนั้นยังไม่ได้ตั้ง webhook ของตัวเอง:
-
-```text
-ALERT_WEBHOOK_URL=https://your-webhook-url
-ALERT_WEBHOOK_TOKEN=optional-secret-token
-ALERT_COOLDOWN_MINUTES=30
-APP_PUBLIC_URL=http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io
-```
-
-Payload ที่ส่งไป webhook:
+Body มีรูปแบบ:
 
 ```json
 {
-  "event": "sterile_room_alert",
-  "level": "critical",
-  "message": "ESP-STERILE-ROOM-01: Temp สูง 29.1°C, RH สูง 72.4%",
-  "hospital": "ชื่อโรงพยาบาล",
-  "room": "ชื่อห้อง",
-  "device": "ชื่ออุปกรณ์",
-  "deviceId": "ESP-STERILE-ROOM-01",
-  "temperature": 29.1,
-  "humidity": 72.4,
-  "timestamp": "2026-06-18T00:00:00.000Z",
-  "appUrl": "http://..."
+  "messages": [
+    {
+      "type": "flex",
+      "altText": "แจ้งเตือนอุณหภูมิและความชื้น",
+      "contents": {}
+    }
+  ]
 }
 ```
 
-ถ้าต้องการทดสอบ webhook ด้วย API ให้ login ด้วย `system_admin` หรือ `hospital_admin` แล้วเรียก:
+แต่ละโรงพยาบาลเก็บ Client Key และ Secret Key แยกกัน ผู้ดูแลโรงพยาบาลเห็นและแก้ไขได้
+เฉพาะค่าของโรงพยาบาลตนเอง หลังบันทึกให้กด `ทดสอบ MOPH Notify` หนึ่งครั้ง
+
+ถ้าต้องการทดสอบด้วย API ให้ login ด้วย `system_admin` หรือ `hospital_admin` แล้วเรียก:
 
 ```text
 POST /api/notifications/test?hospitalId=HOSPITAL_ID

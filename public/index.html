@@ -105,20 +105,13 @@
               <button type="submit">เพิ่มผู้ใช้</button>
             </form>
             <form id="alertSettingsForm">
-              <h3>แจ้งเตือนของ รพ.</h3>
-              <label class="copy-field">
-                LINE Webhook URL
-                <input id="lineWebhookUrl" type="text" readonly>
-              </label>
-              <input name="lineChannelAccessToken" placeholder="LINE Channel Access Token">
-              <input name="lineTo" placeholder="LINE User ID หรือ Group ID">
-              <button id="refreshLineIdsButton" class="secondary-button" type="button">โหลด LINE ID ล่าสุด</button>
-              <div id="lineWebhookEvents" class="line-events"></div>
-              <input name="alertWebhookUrl" placeholder="Webhook URL ของ รพ. นี้">
-              <input name="alertWebhookToken" placeholder="Token ถ้ามี">
+              <h3>MOPH Notify ของ รพ.</h3>
+              <input name="mophNotifyBaseUrl" type="url" placeholder="MOPH Notify Base URL">
+              <input name="mophNotifyClientKey" autocomplete="off" placeholder="Client Key จาก CMS MOPH Notify">
+              <input name="mophNotifySecretKey" type="password" autocomplete="new-password" placeholder="Secret Key จาก CMS MOPH Notify">
               <input name="alertCooldownMinutes" type="number" min="0" step="1" value="30" placeholder="แจ้งซ้ำทุกกี่นาที">
-              <button type="submit">บันทึกแจ้งเตือน</button>
-              <button id="testAlertButton" class="secondary-button" type="button">ทดสอบแจ้งเตือน</button>
+              <button type="submit">บันทึก MOPH Notify</button>
+              <button id="testAlertButton" class="secondary-button" type="button">ทดสอบ MOPH Notify</button>
             </form>
           </div>
           <div class="crud-grid">

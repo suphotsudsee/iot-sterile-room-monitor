@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs/promises");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -105,6 +106,62 @@ test("server stores readings in SQLite and retains them after restart", async ()
     assert.equal(afterRestart.managementStats.hospitals[hospitalId].readings, 1);
   } finally {
     await stopServer(running.child);
+    await fs.rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("MOPH Notify uses the documented endpoint, headers, and messages body", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "sterile-moph-"));
+  const appPort = 33000 + Math.floor(Math.random() * 500);
+  const notifyPort = 33500 + Math.floor(Math.random() * 500);
+  let received = null;
+  const notifyServer = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", chunk => { body += chunk; });
+    req.on("end", () => {
+      received = { url: req.url, headers: req.headers, body: JSON.parse(body) };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    });
+  });
+  await new Promise(resolve => notifyServer.listen(notifyPort, "127.0.0.1", resolve));
+  const running = await startServer(dataDir, appPort);
+
+  try {
+    const cookie = await login(running.baseUrl);
+    const bootstrap = await fetch(`${running.baseUrl}/api/bootstrap`, {
+      headers: { cookie }
+    }).then(response => response.json());
+    const hospitalId = bootstrap.hospitals[0].id;
+
+    const settingsResponse = await fetch(`${running.baseUrl}/api/hospitals/alert-settings`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        hospitalId,
+        mophNotifyBaseUrl: `http://127.0.0.1:${notifyPort}/api/notify/send`,
+        mophNotifyClientKey: "client-key-test",
+        mophNotifySecretKey: "secret-key-test",
+        alertCooldownMinutes: 30
+      })
+    });
+    assert.equal(settingsResponse.status, 200);
+
+    const testResponse = await fetch(
+      `${running.baseUrl}/api/notifications/test?hospitalId=${encodeURIComponent(hospitalId)}`,
+      { method: "POST", headers: { "content-type": "application/json", cookie }, body: "{}" }
+    );
+    assert.equal(testResponse.status, 200);
+    assert.equal(received.url, "/api/notify/send");
+    assert.equal(received.headers["client-key"], "client-key-test");
+    assert.equal(received.headers["secret-key"], "secret-key-test");
+    assert.equal(received.headers["content-type"], "application/json");
+    assert.equal(Array.isArray(received.body.messages), true);
+    assert.equal(received.body.messages[0].type, "flex");
+    assert.equal("to" in received.body, false);
+  } finally {
+    await stopServer(running.child);
+    await new Promise(resolve => notifyServer.close(resolve));
     await fs.rm(dataDir, { recursive: true, force: true });
   }
 });

@@ -15,10 +15,9 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@phoubon.in.th";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
-const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
-const ALERT_WEBHOOK_TOKEN = process.env.ALERT_WEBHOOK_TOKEN || "";
 const ALERT_COOLDOWN_MINUTES = Number(process.env.ALERT_COOLDOWN_MINUTES || 30);
 const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL || "";
+const MOPH_NOTIFY_BASE_URL = process.env.MOPH_NOTIFY_BASE_URL || "https://morpromt2f.moph.go.th";
 const VALID_TEMP_MIN = Number(process.env.VALID_TEMP_MIN || 5);
 const VALID_TEMP_MAX = Number(process.env.VALID_TEMP_MAX || 50);
 const VALID_RH_MIN = Number(process.env.VALID_RH_MIN || 1);
@@ -141,10 +140,9 @@ function createDefaultDatabase() {
         id: hospitalId,
         name: "โรงพยาบาลตัวอย่าง",
         code: "DEMO-HOSPITAL",
-        alertWebhookUrl: "",
-        alertWebhookToken: "",
-        lineChannelAccessToken: "",
-        lineTo: "",
+        mophNotifyBaseUrl: MOPH_NOTIFY_BASE_URL,
+        mophNotifyClientKey: "",
+        mophNotifySecretKey: "",
         alertCooldownMinutes: 30,
         createdAt: nowIso()
       }
@@ -353,11 +351,14 @@ function cleanUser(user) {
 
 function cleanHospitalForUser(hospital, user) {
   const clean = { ...hospital };
+  delete clean.alertWebhookUrl;
+  delete clean.alertWebhookToken;
+  delete clean.lineChannelAccessToken;
+  delete clean.lineTo;
   if (!canManageTenant(user, hospital.id)) {
-    delete clean.alertWebhookUrl;
-    delete clean.alertWebhookToken;
-    delete clean.lineChannelAccessToken;
-    delete clean.lineTo;
+    delete clean.mophNotifyBaseUrl;
+    delete clean.mophNotifyClientKey;
+    delete clean.mophNotifySecretKey;
     delete clean.alertCooldownMinutes;
   }
   return clean;
@@ -440,16 +441,15 @@ function makeAlertMessage(reading, room, device) {
 
 function hospitalNotificationConfig(hospital) {
   return {
-    url: hospital?.alertWebhookUrl || ALERT_WEBHOOK_URL,
-    token: hospital?.alertWebhookToken || ALERT_WEBHOOK_TOKEN,
-    lineChannelAccessToken: hospital?.lineChannelAccessToken || "",
-    lineTo: hospital?.lineTo || "",
+    mophNotifyBaseUrl: hospital?.mophNotifyBaseUrl || MOPH_NOTIFY_BASE_URL,
+    mophNotifyClientKey: hospital?.mophNotifyClientKey || "",
+    mophNotifySecretKey: hospital?.mophNotifySecretKey || "",
     cooldownMinutes: Number(hospital?.alertCooldownMinutes ?? ALERT_COOLDOWN_MINUTES)
   };
 }
 
 function shouldSendNotification(db, alert, config) {
-  if (!config.url && !(config.lineChannelAccessToken && config.lineTo)) return false;
+  if (!(config.mophNotifyClientKey && config.mophNotifySecretKey)) return false;
   if (!Number.isFinite(config.cooldownMinutes) || config.cooldownMinutes <= 0) return true;
   const cutoff = Date.now() - config.cooldownMinutes * 60 * 1000;
   return !db.alerts.some(item =>
@@ -478,25 +478,14 @@ async function sendAlertNotification({ alert, reading, hospital, room, device, c
     appUrl: APP_PUBLIC_URL
   };
 
-  if (config.lineChannelAccessToken && config.lineTo) {
-    return sendLineNotification(payload, config);
+  if (config.mophNotifyClientKey && config.mophNotifySecretKey) {
+    return sendMophNotify(payload, config);
   }
 
-  if (!config.url) return { skipped: true };
-  const headers = { "content-type": "application/json" };
-  if (config.token) headers.authorization = `Bearer ${config.token}`;
-  const response = await fetch(config.url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload)
-  });
-  if (!response.ok) {
-    throw new Error(`Webhook failed: ${response.status}`);
-  }
-  return { ok: true };
+  return { skipped: true };
 }
 
-async function sendLineNotification(payload, config) {
+async function sendMophNotify(payload, config) {
   const alertStyle = levelStyle(payload.level);
   const tempStyle = levelStyle(payload.tempLevel);
   const rhStyle = levelStyle(payload.rhLevel);
@@ -562,22 +551,24 @@ async function sendLineNotification(payload, config) {
     }
   };
 
-  const response = await fetch("https://api.line.me/v2/bot/message/push", {
+  const endpoint = `${String(config.mophNotifyBaseUrl || MOPH_NOTIFY_BASE_URL).replace(/\/+$/, "")}/api/notify/send`;
+  const response = await fetch(endpoint, {
     method: "POST",
+    signal: AbortSignal.timeout(15_000),
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${config.lineChannelAccessToken}`
+      "client-key": config.mophNotifyClientKey,
+      "secret-key": config.mophNotifySecretKey
     },
     body: JSON.stringify({
-      to: config.lineTo,
       messages: [message]
     })
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`LINE push failed: ${response.status} ${body}`.trim());
+    throw new Error(`MOPH Notify failed: ${response.status} ${body}`.trim());
   }
-  return { ok: true, channel: "line" };
+  return { ok: true, channel: "moph-notify" };
 }
 
 async function handleAuth(req, res, url) {
@@ -713,10 +704,9 @@ async function handleApi(req, res, url) {
         id: id("hosp"),
         name: String(payload.name || "").trim(),
         code: String(payload.code || "").trim() || `HOSP-${db.hospitals.length + 1}`,
-        alertWebhookUrl: "",
-        alertWebhookToken: "",
-        lineChannelAccessToken: "",
-        lineTo: "",
+        mophNotifyBaseUrl: MOPH_NOTIFY_BASE_URL,
+        mophNotifyClientKey: "",
+        mophNotifySecretKey: "",
         alertCooldownMinutes: 30,
         createdAt: nowIso()
       };
@@ -774,10 +764,25 @@ async function handleApi(req, res, url) {
     return withDb(db => {
       const hospital = db.hospitals.find(item => item.id === hospitalId);
       if (!hospital) return json(res, 404, { error: "Hospital not found" });
-      hospital.alertWebhookUrl = String(payload.alertWebhookUrl || "").trim();
-      hospital.alertWebhookToken = String(payload.alertWebhookToken || "").trim();
-      hospital.lineChannelAccessToken = String(payload.lineChannelAccessToken || "").trim();
-      hospital.lineTo = String(payload.lineTo || "").trim();
+      const mophNotifyBaseUrl = String(payload.mophNotifyBaseUrl || MOPH_NOTIFY_BASE_URL)
+        .trim()
+        .replace(/\/+$/, "")
+        .replace(/\/api\/notify\/send$/i, "");
+      if (!/^https?:\/\//i.test(mophNotifyBaseUrl)) {
+        return json(res, 400, { error: "MOPH Notify Base URL ต้องขึ้นต้นด้วย http:// หรือ https://" });
+      }
+      const mophNotifyClientKey = String(payload.mophNotifyClientKey || "").trim();
+      const mophNotifySecretKey = String(payload.mophNotifySecretKey || "").trim();
+      if (Boolean(mophNotifyClientKey) !== Boolean(mophNotifySecretKey)) {
+        return json(res, 400, { error: "กรุณากรอก Client Key และ Secret Key ให้ครบทั้งสองค่า" });
+      }
+      hospital.mophNotifyBaseUrl = mophNotifyBaseUrl;
+      hospital.mophNotifyClientKey = mophNotifyClientKey;
+      hospital.mophNotifySecretKey = mophNotifySecretKey;
+      delete hospital.alertWebhookUrl;
+      delete hospital.alertWebhookToken;
+      delete hospital.lineChannelAccessToken;
+      delete hospital.lineTo;
       const cooldown = Number(payload.alertCooldownMinutes);
       hospital.alertCooldownMinutes = Number.isFinite(cooldown) && cooldown >= 0 ? cooldown : 30;
       return json(res, 200, { hospital });
@@ -1030,7 +1035,7 @@ async function handleApi(req, res, url) {
       : db.hospitals.find(item => item.id === user.hospitalId);
     if (!canManageTenant(user, hospital?.id)) return json(res, 403, { error: "Forbidden" });
     const notificationConfig = hospitalNotificationConfig(hospital);
-    if (!notificationConfig.url && !(notificationConfig.lineChannelAccessToken && notificationConfig.lineTo)) {
+    if (!(notificationConfig.mophNotifyClientKey && notificationConfig.mophNotifySecretKey)) {
       return json(res, 400, { error: "Notification is not configured for this hospital" });
     }
     const room = db.rooms.find(item => item.hospitalId === hospital?.id);

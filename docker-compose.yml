@@ -9,8 +9,7 @@ services:
       ADMIN_EMAIL: admin@phoubon.in.th
       ADMIN_PASSWORD: admin123
       APP_PUBLIC_URL: http://ymxbo5qt3r0g1nnlv5u0q7v6.110.164.222.217.sslip.io
-      ALERT_WEBHOOK_URL: ""
-      ALERT_WEBHOOK_TOKEN: ""
+      MOPH_NOTIFY_BASE_URL: https://morpromt2f.moph.go.th
       ALERT_COOLDOWN_MINUTES: "30"
       MQTT_ENABLED: "true"
       MQTT_URL: mqtt://mqtt-broker:1883

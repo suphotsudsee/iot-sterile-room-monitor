@@ -369,27 +369,10 @@ function renderSelectors() {
 function renderAlertSettings() {
   const hospital = selectedHospital();
   if (!hospital || !$("#alertSettingsForm")) return;
-  $("#lineWebhookUrl").value = `${publicOrigin()}/api/line/webhook?hospitalId=${encodeURIComponent(hospital.id)}`;
-  $("#alertSettingsForm").elements.lineChannelAccessToken.value = hospital.lineChannelAccessToken || "";
-  $("#alertSettingsForm").elements.lineTo.value = hospital.lineTo || "";
-  $("#alertSettingsForm").elements.alertWebhookUrl.value = hospital.alertWebhookUrl || "";
-  $("#alertSettingsForm").elements.alertWebhookToken.value = hospital.alertWebhookToken || "";
+  $("#alertSettingsForm").elements.mophNotifyBaseUrl.value = hospital.mophNotifyBaseUrl || "https://morpromt2f.moph.go.th";
+  $("#alertSettingsForm").elements.mophNotifyClientKey.value = hospital.mophNotifyClientKey || "";
+  $("#alertSettingsForm").elements.mophNotifySecretKey.value = hospital.mophNotifySecretKey || "";
   $("#alertSettingsForm").elements.alertCooldownMinutes.value = hospital.alertCooldownMinutes ?? 30;
-  renderLineWebhookEvents();
-}
-
-function renderLineWebhookEvents() {
-  const list = $("#lineWebhookEvents");
-  if (!list) return;
-  list.innerHTML = state.lineWebhookEvents.length
-    ? `<b>LINE ID ล่าสุดที่ทักบอท</b>` + state.lineWebhookEvents.map(event => `
-        <button type="button" class="line-event-button" data-line-id="${escapeHtml(event.lineId)}">
-          <span>${escapeHtml(event.sourceType || "line")}</span>
-          <code>${escapeHtml(event.lineId)}</code>
-          <small>${new Date(event.receivedAt).toLocaleString("th-TH")}</small>
-        </button>
-      `).join("")
-    : `<p>ยังไม่มี LINE ID ให้เพิ่มบอทเป็นเพื่อนหรือเชิญเข้ากลุ่ม แล้วส่งข้อความหา Bot 1 ครั้ง จากนั้นกดโหลด LINE ID ล่าสุด และตรวจว่า Webhook URL ใน LINE เป็น HTTPS ของ รพ. นี้</p>`;
 }
 
 function renderDevices() {
@@ -776,35 +759,13 @@ $("#alertSettingsForm").addEventListener("submit", async event => {
     method: "POST",
     body: JSON.stringify({
       hospitalId: selectedHospitalId(),
-      lineChannelAccessToken: form.get("lineChannelAccessToken"),
-      lineTo: form.get("lineTo"),
-      alertWebhookUrl: form.get("alertWebhookUrl"),
-      alertWebhookToken: form.get("alertWebhookToken"),
+      mophNotifyBaseUrl: form.get("mophNotifyBaseUrl"),
+      mophNotifyClientKey: form.get("mophNotifyClientKey"),
+      mophNotifySecretKey: form.get("mophNotifySecretKey"),
       alertCooldownMinutes: Number(form.get("alertCooldownMinutes"))
     })
   });
   await refreshAll();
-});
-
-$("#lineWebhookEvents").addEventListener("click", event => {
-  const button = event.target.closest(".line-event-button");
-  if (!button) return;
-  $("#alertSettingsForm").elements.lineTo.value = button.dataset.lineId;
-});
-
-$("#refreshLineIdsButton").addEventListener("click", async () => {
-  const form = $("#alertSettingsForm");
-  const currentValues = {
-    lineChannelAccessToken: form.elements.lineChannelAccessToken.value,
-    lineTo: form.elements.lineTo.value,
-    alertWebhookUrl: form.elements.alertWebhookUrl.value,
-    alertWebhookToken: form.elements.alertWebhookToken.value,
-    alertCooldownMinutes: form.elements.alertCooldownMinutes.value
-  };
-  await loadBootstrap();
-  Object.entries(currentValues).forEach(([key, value]) => {
-    form.elements[key].value = value;
-  });
 });
 
 $("#testAlertButton").addEventListener("click", async () => {
@@ -812,7 +773,7 @@ $("#testAlertButton").addEventListener("click", async () => {
     method: "POST",
     body: "{}"
   });
-  alert("ส่งทดสอบแจ้งเตือนแล้ว");
+  alert("ส่งทดสอบ MOPH Notify แล้ว");
 });
 
 $("#manualForm").addEventListener("submit", async event => {
