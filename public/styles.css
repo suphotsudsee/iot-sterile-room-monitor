@@ -626,9 +626,43 @@ h3 {
   cursor: pointer;
 }
 
+.dashboard-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f1f6ff;
+  color: var(--blue);
+}
+
+.dashboard-notice.error {
+  background: #fff0ed;
+  color: #a91f1f;
+}
+
+.dashboard-notice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#retryDashboardButton {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--blue);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .chart-panel {
   margin-top: 12px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .chart-title {
@@ -645,6 +679,7 @@ h3 {
 
 .monitor-grid {
   display: grid;
+  min-width: 1080px;
   grid-template-columns: 116px repeat(var(--days), 1fr);
   grid-template-rows: 34px repeat(5, 40px);
   border-top: 1px solid #7798d2;

@@ -145,6 +145,19 @@ class SqliteStore {
     }
   }
 
+  readCollection(collection) {
+    if (!COLLECTIONS.includes(collection)) throw new Error("Unknown collection");
+    return this.database.prepare(`SELECT data FROM "${collection}" ORDER BY rowid`)
+      .all().map(row => JSON.parse(row.data));
+  }
+
+  getById(collection, id) {
+    if (!COLLECTIONS.includes(collection)) throw new Error("Unknown collection");
+    const row = this.database.prepare(`SELECT data FROM "${collection}" WHERE id = ?`)
+      .get(String(id));
+    return row ? JSON.parse(row.data) : null;
+  }
+
   load() {
     const db = {};
     const snapshot = {};

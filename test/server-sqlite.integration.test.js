@@ -95,6 +95,8 @@ test("server stores readings in SQLite and retains them after restart", async ()
       })
     });
     assert.equal(readingResponse.status, 201);
+    const savedReading = (await readingResponse.json()).reading;
+    assert.ok(savedReading.localMonth);
 
     await stopServer(running.child);
     running = await startServer(dataDir, port);
@@ -104,6 +106,17 @@ test("server stores readings in SQLite and retains them after restart", async ()
     }).then(response => response.json());
     const hospitalId = afterRestart.hospitals[0].id;
     assert.equal(afterRestart.managementStats.hospitals[hospitalId].readings, 1);
+    const query = new URLSearchParams({
+      month: savedReading.localMonth, hospitalId, roomId: device.roomId
+    });
+    const dashboardResponse = await fetch(`${running.baseUrl}/api/readings?${query}`, {
+      headers: { cookie }
+    });
+    assert.equal(dashboardResponse.status, 200);
+    const dashboard = await dashboardResponse.json();
+    assert.equal(dashboard.readings.length, 1);
+    assert.equal(dashboard.readings[0].temperature, 22.5);
+    assert.equal(dashboard.readings[0].humidity, 50);
   } finally {
     await stopServer(running.child);
     await fs.rm(dataDir, { recursive: true, force: true });

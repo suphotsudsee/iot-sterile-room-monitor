@@ -34,6 +34,11 @@ test("migrates the latest complete legacy JSON document and persists changes", a
   const db = store.load();
   assert.equal(db.hospitals[0].id, "hosp_new");
   assert.equal(db.readings.length, 1);
+  assert.deepEqual(store.getById("hospitals", "hosp_new"), db.hospitals[0]);
+  assert.equal(store.getById("hospitals", "missing"), null);
+  assert.deepEqual(store.readCollection("readings"), db.readings);
+  assert.throws(() => store.readCollection("unknown"), /Unknown collection/);
+  assert.throws(() => store.getById("unknown", "id"), /Unknown collection/);
   db.readings.push({ id: "reading_2", temperature: 24, humidity: 55 });
   store.save(db);
   store.close();

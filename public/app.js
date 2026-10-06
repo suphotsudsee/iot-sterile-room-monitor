@@ -35,6 +35,8 @@ const validSensorRange = {
 };
 
 const $ = selector => document.querySelector(selector);
+let dashboardController = null;
+let dashboardRequestId = 0;
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -116,15 +118,31 @@ function currentDeviceName(reading) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    headers: { "content-type": "application/json", ...(options.headers || {}) },
-    ...options
-  });
-  const isJson = response.headers.get("content-type")?.includes("application/json");
-  const body = isJson ? await response.json() : await response.text();
-  if (!response.ok) throw new Error(body.error || body || "Request failed");
-  return body;
+  const timeout = (!options.method || options.method === "GET") ? AbortSignal.timeout(30000) : null;
+  const signal = timeout && options.signal
+    ? AbortSignal.any([timeout, options.signal])
+    : options.signal || timeout;
+  try {
+    const response = await fetch(path, {
+      credentials: "same-origin",
+      ...options,
+      headers: { "content-type": "application/json", ...(options.headers || {}) },
+      signal
+    });
+    const isJson = response.headers.get("content-type")?.includes("application/json");
+    const body = isJson ? await response.json() : await response.text();
+    if (!response.ok) {
+      const error = new Error(body.error || body || "Request failed");
+      error.status = response.status;
+      throw error;
+    }
+    return body;
+  } catch (error) {
+    if (timeout?.aborted && !options.signal?.aborted) {
+      throw new Error("เซิร์ฟเวอร์ใช้เวลาโหลดข้อมูลเกิน 30 วินาที กรุณาลองโหลดใหม่");
+    }
+    throw error;
+  }
 }
 
 function showApp(show) {
@@ -484,52 +502,104 @@ async function loadBootstrap() {
   renderSelectors();
 }
 
-async function loadDashboard() {
+function dashboardNotice(message, isError = false) {
+  $("#dashboardNotice").classList.toggle("hidden", !message);
+  $("#dashboardNotice").classList.toggle("error", isError);
+  $("#dashboardMessage").textContent = message;
+  $("#retryDashboardButton").classList.toggle("hidden", !isError);
+}
+
+function drawDashboard(readings, month) {
+  const days = groupDaily(readings, month);
+  drawGrid($("#tempGrid"), tempRows, days, day => day.temperature, tempLevel);
+  drawGrid($("#humidityGrid"), rhRows, days, day => day.humidity, rhLevel);
+  drawSummary(days);
+  renderLatestReadings(readings);
+}
+
+function prepareDashboard() {
+  state.readings = [];
   const month = $("#monthPicker").value || currentMonth();
   $("#thaiYear").value = toThaiYear(month);
+  drawDashboard([], month);
+  $("#reportLink").removeAttribute("href");
+  $("#serverUrlText").textContent = `${location.origin}/api/readings`;
+  $("#deviceStatus").textContent = "กำลังโหลดข้อมูล...";
+  dashboardNotice("กำลังโหลดข้อมูล...");
+}
+
+function dashboardError(error) {
+  if (error.status === 401) {
+    showApp(false);
+    $("#loginError").textContent = "หมดเวลาเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่";
+    return;
+  }
+  $("#deviceStatus").textContent = "โหลดข้อมูลไม่สำเร็จ";
+  dashboardNotice(`โหลด Dashboard ไม่สำเร็จ: ${error.message}`, true);
+}
+
+async function loadDashboard() {
+  dashboardController?.abort();
+  const controller = new AbortController();
+  dashboardController = controller;
+  const requestId = ++dashboardRequestId;
+  const month = $("#monthPicker").value || currentMonth();
+  prepareDashboard();
   renderStandards();
   renderDevices();
   renderAlerts();
 
-  let query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
-  let payload = await api(`/api/readings?${query}`);
-  state.readings = cleanReadings(payload.readings);
-  if (!state.readings.length && selectedRoomId()) {
-    const allQuery = new URLSearchParams({ month, hospitalId: selectedHospitalId() });
-    const allPayload = await api(`/api/readings?${allQuery}`);
-    const latest = cleanReadings(allPayload.readings)
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-    if (latest?.roomId && latest.roomId !== selectedRoomId() && state.rooms.some(room => room.id === latest.roomId)) {
-      $("#roomSelect").value = latest.roomId;
-      renderStandards();
-      renderDevices();
-      renderAlerts();
-      query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
-      payload = await api(`/api/readings?${query}`);
-      state.readings = cleanReadings(payload.readings);
+  try {
+    let query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
+    let payload = await api(`/api/readings?${query}`, { signal: controller.signal });
+    if (requestId !== dashboardRequestId) return;
+    let readings = cleanReadings(payload.readings);
+    if (!readings.length && selectedRoomId()) {
+      const allQuery = new URLSearchParams({ month, hospitalId: selectedHospitalId() });
+      const allPayload = await api(`/api/readings?${allQuery}`, { signal: controller.signal });
+      if (requestId !== dashboardRequestId) return;
+      const latest = cleanReadings(allPayload.readings)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+      if (latest?.roomId && latest.roomId !== selectedRoomId() && state.rooms.some(room => room.id === latest.roomId)) {
+        $("#roomSelect").value = latest.roomId;
+        renderStandards();
+        renderDevices();
+        renderAlerts();
+        query = new URLSearchParams({ month, hospitalId: selectedHospitalId(), roomId: selectedRoomId() });
+        payload = await api(`/api/readings?${query}`, { signal: controller.signal });
+        if (requestId !== dashboardRequestId) return;
+        readings = cleanReadings(payload.readings);
+      }
     }
+    state.readings = readings;
+    drawDashboard(readings, month);
+    dashboardNotice(readings.length ? "" : "ไม่พบข้อมูลที่ใช้แสดงผลในห้องและเดือนที่เลือก");
+
+    const latest = [...state.readings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+    const roomDevices = state.devices.filter(device => device.roomId === selectedRoomId());
+    $("#deviceStatus").textContent = latest
+      ? `${currentDeviceName(latest)} ส่งข้อมูลล่าสุด ${new Date(latest.timestamp).toLocaleString("th-TH")}`
+      : roomDevices.length
+        ? `ยังไม่มีข้อมูลในเดือนนี้ (${roomDevices.map(device => device.name).join(", ")})`
+        : "ยังไม่มีอุปกรณ์ในห้องนี้";
+
+    $("#reportLink").href = `/api/reports/monthly.csv?${query}`;
+    $("#serverUrlText").textContent = `${location.origin}/api/readings`;
+  } catch (error) {
+    if (requestId === dashboardRequestId && !controller.signal.aborted) dashboardError(error);
   }
-  const days = groupDaily(state.readings, month);
-  drawGrid($("#tempGrid"), tempRows, days, day => day.temperature, tempLevel);
-  drawGrid($("#humidityGrid"), rhRows, days, day => day.humidity, rhLevel);
-  drawSummary(days);
-  renderLatestReadings(state.readings);
-
-  const latest = [...state.readings].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-  const roomDevices = state.devices.filter(device => device.roomId === selectedRoomId());
-  $("#deviceStatus").textContent = latest
-    ? `${currentDeviceName(latest)} ส่งข้อมูลล่าสุด ${new Date(latest.timestamp).toLocaleString("th-TH")}`
-    : roomDevices.length
-      ? `ยังไม่มีข้อมูลในเดือนนี้ (${roomDevices.map(device => device.name).join(", ")})`
-      : "ยังไม่มีอุปกรณ์ในห้องนี้";
-
-  $("#reportLink").href = `/api/reports/monthly.csv?${query}`;
-  $("#serverUrlText").textContent = `${location.origin}/api/readings`;
 }
 
 async function refreshAll() {
-  await loadBootstrap();
-  await loadDashboard();
+  dashboardController?.abort();
+  ++dashboardRequestId;
+  prepareDashboard();
+  try {
+    await loadBootstrap();
+    await loadDashboard();
+  } catch (error) {
+    dashboardError(error);
+  }
 }
 
 $("#loginForm").addEventListener("submit", async event => {
@@ -555,6 +625,7 @@ $("#logoutButton").addEventListener("click", async () => {
 
 $("#dashboardTab").addEventListener("click", () => showPage("dashboard"));
 $("#managementTab").addEventListener("click", () => showPage("management"));
+$("#retryDashboardButton").addEventListener("click", refreshAll);
 
 $("#hospitalSelect").addEventListener("change", () => {
   renderSelectors();

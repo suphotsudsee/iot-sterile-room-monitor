@@ -192,9 +192,11 @@ function createDefaultDatabase() {
 async function loadDb() {
   const db = store.load();
   db.lineWebhookEvents = Array.isArray(db.lineWebhookEvents) ? db.lineWebhookEvents : [];
+  const readingsById = new Map((db.readings || []).map(item => [item.id, item]));
+  const roomsById = new Map((db.rooms || []).map(item => [item.id, item]));
   for (const alert of db.alerts || []) {
-    const reading = (db.readings || []).find(item => item.id === alert.readingId);
-    const room = (db.rooms || []).find(item => item.id === alert.roomId);
+    const reading = readingsById.get(alert.readingId);
+    const room = roomsById.get(alert.roomId);
     if (reading && room) alert.level = alertLevel(reading, room);
   }
   return db;
@@ -386,8 +388,7 @@ async function requireUser(req, res) {
     return null;
   }
   session.expiresAt = Date.now() + SESSION_TTL_MS;
-  const db = await loadDb();
-  const user = db.users.find(item => item.id === session.userId);
+  const user = store.getById("users", session.userId);
   if (!user) {
     sessions.delete(sid);
     json(res, 401, { error: "Login required" });
@@ -598,8 +599,7 @@ async function sendMophNotify(payload, config) {
 async function handleAuth(req, res, url) {
   if (url.pathname === "/api/login" && req.method === "POST") {
     const payload = await readJson(req);
-    const db = await loadDb();
-    const user = db.users.find(item => item.email.toLowerCase() === String(payload.email || "").toLowerCase());
+    const user = store.readCollection("users").find(item => item.email.toLowerCase() === String(payload.email || "").toLowerCase());
     if (!user || !verifyPassword(String(payload.password || ""), user.passwordHash)) {
       return json(res, 401, { error: "Email or password is incorrect" });
     }
